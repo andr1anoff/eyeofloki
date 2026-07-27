@@ -15,6 +15,10 @@ CompetitionLevel = Literal["Low", "Medium", "High", "Very high"]
 ConfidenceLevel = Literal["Low", "Medium", "High"]
 
 
+PrizeDelivery = Literal["shipped", "location_bound", "digital"]
+EntryCadence = Literal["once", "daily", "weekly", "monthly"]
+
+
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -48,6 +52,8 @@ class UserProfile(StrictModel):
         ],
         max_length=20,
     )
+    ships_to: str = "Germany"
+    reachable_for_events: str = "Berlin and Brandenburg"
     avoid_prizes: list[str] = Field(
         default_factory=lambda: [
             "gardening and garden furniture",
@@ -83,7 +89,49 @@ class DiscoveryRequest(StrictModel):
     known_titles: list[str] = Field(default_factory=list, max_length=1_000)
     round: int = Field(default=0, ge=0, le=1_000_000)
     limit: int = Field(default=12, ge=1, le=20)
+    queries: list[str] | None = Field(default=None, max_length=16)
     profile: UserProfile = Field(default_factory=UserProfile)
+
+
+class HuntRequest(StrictModel):
+    brief: str = Field(min_length=3, max_length=400)
+    known_urls: list[HttpUrl] = Field(default_factory=list, max_length=1_000)
+    known_titles: list[str] = Field(default_factory=list, max_length=1_000)
+    limit: int = Field(default=12, ge=1, le=20)
+    profile: UserProfile = Field(default_factory=UserProfile)
+
+
+class HuntResponse(StrictModel):
+    interpretation: str
+    direct_queries: list[str]
+    adjacent_queries_used: bool
+    result: "DiscoveryResponse"
+
+
+class HuntPlan(StrictModel):
+    interpretation: str = Field(min_length=3, max_length=300)
+    direct_queries: list[str] = Field(min_length=1, max_length=8)
+    adjacent_queries: list[str] = Field(min_length=1, max_length=8)
+
+
+class PortfolioEntry(StrictModel):
+    contest_id: int
+    chance_ppm: int = Field(ge=0, le=1_000_000)
+    friction_minutes: float = Field(ge=0, le=240)
+    prize_value_eur: int = Field(default=0, ge=0, le=200_000)
+
+
+class PortfolioRequest(StrictModel):
+    entries: list[PortfolioEntry] = Field(min_length=1, max_length=500)
+    minutes_available: float = Field(default=60.0, ge=1, le=10_000)
+
+
+class PortfolioResponse(StrictModel):
+    selected_ids: list[int]
+    minutes_used: float
+    win_something_ppm: int
+    expected_value_eur: float
+    marginal_gain_ppm: list[int]
 
 
 class PageEvidence(StrictModel):
@@ -117,6 +165,10 @@ class ModelAssessment(StrictModel):
     prize_utility: int = Field(ge=0, le=100)
     legitimacy: int = Field(ge=0, le=100)
     locality_fit: int = Field(ge=0, le=100)
+    prize_delivery: PrizeDelivery = "location_bound"
+    ships_to_germany: bool = True
+    prize_value_eur: int = Field(default=0, ge=0, le=200_000)
+    entry_cadence: EntryCadence = "once"
     friction_minutes: float = Field(ge=0, le=240)
     summary: str = Field(min_length=1, max_length=420)
     reasons: list[str] = Field(min_length=2, max_length=4)
@@ -172,6 +224,10 @@ class DiscoveryAssessment(StrictModel):
     prize_utility: int = Field(ge=0, le=100)
     legitimacy: int = Field(ge=0, le=100)
     locality_fit: int = Field(ge=0, le=100)
+    prize_delivery: PrizeDelivery = "location_bound"
+    ships_to_germany: bool = True
+    prize_value_eur: int = Field(default=0, ge=0, le=200_000)
+    entry_cadence: EntryCadence = "once"
     friction_minutes: float = Field(ge=0, le=240)
     summary: str = Field(min_length=1, max_length=420)
     reasons: list[str] = Field(min_length=2, max_length=4)
@@ -223,6 +279,12 @@ class ContestAnalysis(StrictModel):
     chance_likely_ppm: int
     chance_high_ppm: int
     crowd: str = "Unknown"
+    prize_delivery: PrizeDelivery = "location_bound"
+    prize_value_eur: int = 0
+    entry_cadence: EntryCadence = "once"
+    entries_before_deadline: int = 1
+    effective_chance_ppm: int = 0
+    ev_cents_per_minute: int = 0
     friction_minutes: float
     registration_required: bool
     newsletter_required: bool
@@ -278,3 +340,6 @@ class DiscoveryResponse(StrictModel):
     round: int
     model: str
     analyzed_at: str
+
+
+HuntResponse.model_rebuild()

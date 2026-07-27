@@ -1856,3 +1856,11 @@ button:active,
     transition-duration: 0.01ms !important;
   }
 }
+
+.hunt-form {
+  margin-bottom: 8px;
+}
+
+.hunt-form input {
+  min-width: 0;
+}

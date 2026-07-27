@@ -7,20 +7,25 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .discovery import ContestDiscovery
 from .fetcher import fetch_contest_page
+from .hunt import ContestHunter
 from .models import (
     DiscoveryRequest,
     DiscoveryResponse,
+    HuntRequest,
+    HuntResponse,
+    PortfolioRequest,
+    PortfolioResponse,
     ReconRequest,
     ReconResponse,
 )
 from .research import GeminiContestAnalyst
-from .scoring import score_assessment
+from .scoring import portfolio_ppm, score_assessment, select_for_budget
 from .settings import Settings, get_settings
 
 
 app = FastAPI(
     title="Eye of Loki Intelligence Service",
-    version="4.0.0",
+    version="5.0.0",
     docs_url=None,
     redoc_url=None,
 )
@@ -54,12 +59,12 @@ async def health(runtime: Settings = Depends(get_settings)) -> dict[str, object]
     return {
         "ok": True,
         "service": "eye-of-loki-intelligence",
-        "version": "4.0.0",
+        "version": "5.0.0",
         "model": runtime.GEMINI_MODEL,
         "gemini_configured": bool(runtime.GEMINI_API_KEY),
         "search_configured": bool(runtime.TAVILY_API_KEY),
         "auth_configured": bool(runtime.EYE_OF_LOKI_SHARED_SECRET),
-        "capabilities": ["discovery", "verification"],
+        "capabilities": ["discovery", "verification", "hunt", "portfolio"],
     }
 
 
@@ -85,6 +90,63 @@ async def discover(
             status_code=502,
             detail=f"Discovery failed: {type(exc).__name__}: {exc}",
         ) from exc
+
+
+@app.post(
+    "/v1/hunt",
+    response_model=HuntResponse,
+    dependencies=[Depends(require_secret)],
+)
+async def hunt(
+    request: HuntRequest,
+    runtime: Settings = Depends(get_settings),
+) -> HuntResponse:
+    if not runtime.GEMINI_API_KEY:
+        raise HTTPException(status_code=503, detail="GEMINI_API_KEY is missing")
+    if not runtime.TAVILY_API_KEY:
+        raise HTTPException(status_code=503, detail="TAVILY_API_KEY is missing")
+
+    hunter = ContestHunter(runtime)
+    try:
+        result, plan = await hunter.hunt(request)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Hunt failed: {type(exc).__name__}: {exc}",
+        ) from exc
+
+    return HuntResponse(
+        interpretation=plan.interpretation,
+        direct_queries=plan.direct_queries,
+        adjacent_queries_used=result.searched_queries > len(plan.direct_queries),
+        result=result,
+    )
+
+
+@app.post(
+    "/v1/portfolio",
+    response_model=PortfolioResponse,
+)
+async def portfolio(request: PortfolioRequest) -> PortfolioResponse:
+    """Pure arithmetic: which entries fit the time budget, and what the
+    whole set is worth. No model call, no key required."""
+    selected, minutes_used, marginal = select_for_budget(
+        request.entries, request.minutes_available
+    )
+    by_id = {entry.contest_id: entry for entry in request.entries}
+    chosen = [by_id[cid] for cid in selected]
+    return PortfolioResponse(
+        selected_ids=selected,
+        minutes_used=minutes_used,
+        win_something_ppm=portfolio_ppm([e.chance_ppm for e in chosen]),
+        expected_value_eur=round(
+            sum(
+                (e.chance_ppm / 1_000_000) * e.prize_value_eur for e in chosen
+            ),
+            2,
+        ),
+        marginal_gain_ppm=marginal,
+    )
 
 
 @app.post(

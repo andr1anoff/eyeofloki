@@ -1,7 +1,105 @@
 import math
 from datetime import date, datetime, timezone
 
-from .models import ContestAnalysis, ModelAssessment, ScoreBreakdown
+from .models import (
+    ContestAnalysis,
+    EntryCadence,
+    ModelAssessment,
+    PortfolioEntry,
+    PrizeDelivery,
+    ScoreBreakdown,
+)
+
+
+CADENCE_DAYS: dict[str, int] = {
+    "once": 0,
+    "daily": 1,
+    "weekly": 7,
+    "monthly": 30,
+}
+
+
+def entries_before_deadline(
+    cadence: EntryCadence,
+    deadline: str,
+    cap: int = 60,
+) -> int:
+    """How many separate entries a repeatable contest allows before it
+    closes. A daily contest running for three weeks is 21 lottery tickets,
+    not one."""
+    period = CADENCE_DAYS.get(cadence, 0)
+    if period == 0:
+        return 1
+    try:
+        remaining = (date.fromisoformat(deadline) - date.today()).days
+    except ValueError:
+        return 1
+    if remaining < 0:
+        return 0
+    return max(1, min(cap, remaining // period + 1))
+
+
+def combine_ppm(chance_ppm: int, attempts: int) -> int:
+    """Probability of at least one win across independent attempts."""
+    if chance_ppm <= 0 or attempts <= 0:
+        return 0
+    p = min(1.0, chance_ppm / 1_000_000)
+    return round((1 - (1 - p) ** attempts) * 1_000_000)
+
+
+def locality_score(
+    delivery: PrizeDelivery,
+    ships_to_germany: bool,
+    model_locality_fit: int,
+) -> int:
+    """A parcel is worth the same from Lisbon as from Berlin. A ticket is
+    not. Geography only constrains prizes you have to show up for."""
+    if delivery == "digital":
+        return 100
+    if delivery == "shipped":
+        return 100 if ships_to_germany else 0
+    return model_locality_fit
+
+
+def portfolio_ppm(chances: list[int]) -> int:
+    """P(win at least one) across the whole portfolio."""
+    miss = 1.0
+    for ppm in chances:
+        miss *= 1 - min(1.0, max(0, ppm) / 1_000_000)
+    return round((1 - miss) * 1_000_000)
+
+
+def select_for_budget(
+    entries: list[PortfolioEntry],
+    minutes_available: float,
+) -> tuple[list[int], float, list[int]]:
+    """Greedy by expected value per minute. With a time budget and
+    independent draws this is the right objective: every minute should buy
+    the most expected value it can."""
+    ranked = sorted(
+        entries,
+        key=lambda e: (
+            (e.chance_ppm / 1_000_000) * e.prize_value_eur
+            / max(0.5, e.friction_minutes)
+        ),
+        reverse=True,
+    )
+    chosen: list[int] = []
+    chances: list[int] = []
+    marginal: list[int] = []
+    spent = 0.0
+    running = 0
+    for entry in ranked:
+        cost = max(0.5, entry.friction_minutes)
+        if spent + cost > minutes_available:
+            continue
+        spent += cost
+        chosen.append(entry.contest_id)
+        chances.append(entry.chance_ppm)
+        updated = portfolio_ppm(chances)
+        marginal.append(updated - running)
+        running = updated
+    return chosen, round(spent, 1), marginal
 
 
 def probability_ppm(winners: int, entrants: int) -> int:
@@ -75,7 +173,11 @@ def score_assessment(assessment: ModelAssessment) -> ContestAnalysis:
             assessment.newsletter_required,
         ),
         legitimacy=assessment.legitimacy,
-        locality=assessment.locality_fit,
+        locality=locality_score(
+            assessment.prize_delivery,
+            assessment.ships_to_germany,
+            assessment.locality_fit,
+        ),
         urgency=_urgency_score(assessment.corrected_deadline),
     )
 
@@ -89,6 +191,19 @@ def score_assessment(assessment: ModelAssessment) -> ContestAnalysis:
         + breakdown.legitimacy * 0.16
         + breakdown.locality * 0.10
         + breakdown.urgency * 0.08
+    )
+
+    attempts = entries_before_deadline(
+        assessment.entry_cadence, assessment.corrected_deadline
+    )
+    effective_chance_ppm = combine_ppm(chance_likely_ppm, attempts)
+    # Repetition does not change the rate, only the volume you can buy at
+    # that rate, so EV per minute stays a single-entry figure.
+    ev_cents_per_minute = round(
+        (chance_likely_ppm / 1_000_000)
+        * assessment.prize_value_eur
+        * 100
+        / max(0.5, assessment.friction_minutes)
     )
 
     blocked = not assessment.active or not assessment.entry_mechanism_found
@@ -127,6 +242,12 @@ def score_assessment(assessment: ModelAssessment) -> ContestAnalysis:
         chance_likely_ppm=chance_likely_ppm,
         chance_high_ppm=chance_high_ppm,
         crowd=crowd_label(chance_likely_ppm),
+        prize_delivery=assessment.prize_delivery,
+        prize_value_eur=assessment.prize_value_eur,
+        entry_cadence=assessment.entry_cadence,
+        entries_before_deadline=attempts,
+        effective_chance_ppm=effective_chance_ppm,
+        ev_cents_per_minute=ev_cents_per_minute,
         friction_minutes=assessment.friction_minutes,
         registration_required=assessment.registration_required,
         newsletter_required=assessment.newsletter_required,

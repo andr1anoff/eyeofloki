@@ -99,6 +99,8 @@ const PROFILE = {
   home_city: "Berlin",
   country: "Germany",
   adult: true,
+  ships_to: "Germany",
+  reachable_for_events: "Berlin and Brandenburg",
   preferred_prizes: [
     "cinema tickets",
     "concerts",
@@ -381,6 +383,8 @@ export function Dashboard({ displayName }: { displayName: string }) {
   const [toast, setToast] = useState<string | null>(null);
   const [leadUrl, setLeadUrl] = useState("");
   const [adding, setAdding] = useState(false);
+  const [brief, setBrief] = useState("");
+  const [hunting, setHunting] = useState(false);
   const [railway, setRailway] = useState<RailwayConfig>({
     url: "",
     secret: "",
@@ -880,6 +884,79 @@ export function Dashboard({ displayName }: { displayName: string }) {
     }
   }
 
+  async function runHunt(event: React.FormEvent) {
+    event.preventDefault();
+    const wanted = brief.trim();
+    if (!wanted || hunting) return;
+    if (!railway.url || !railway.secret) {
+      setToast("Connect the Railway backend first.");
+      return;
+    }
+    setHunting(true);
+    try {
+      const response = await fetch(
+        `${railway.url.replace(/\/$/, "")}/v1/hunt`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            authorization: `Bearer ${railway.secret}`,
+          },
+          body: JSON.stringify({
+            brief: wanted,
+            known_urls: contests.map((contest) => contest.url),
+            known_titles: contests.map((contest) => contest.title),
+            limit: 12,
+            profile: PROFILE,
+          }),
+        },
+      );
+      const payload = (await response.json()) as {
+        interpretation?: string;
+        adjacent_queries_used?: boolean;
+        result?: DiscoveryResponse;
+        detail?: string;
+      };
+      if (!response.ok) {
+        throw new Error(payload.detail || "Hunt failed");
+      }
+      const found = Array.isArray(payload.result?.discoveries)
+        ? payload.result.discoveries
+        : [];
+      const imported = found.map((item, index) =>
+        mapDiscovery(item, -Date.now() - index),
+      );
+      const existing = new Set(
+        contests.map((contest) => normalizeContestUrl(contest.url)),
+      );
+      const novel = imported.filter(
+        (contest) => !existing.has(normalizeContestUrl(contest.url)),
+      );
+      if (novel.length) {
+        const updated = [...novel, ...contests];
+        setContests(updated);
+        persistLocal(updated);
+        setSelectedId(novel[0].id);
+        setFilter("ALL");
+      }
+      const widened = payload.adjacent_queries_used
+        ? " Nothing matched literally, so this widened to neighbouring categories."
+        : "";
+      setToast(
+        novel.length
+          ? `${novel.length} new from "${payload.interpretation ?? wanted}".${widened}`
+          : `Nothing new for "${wanted}". Try a broader wording.${widened}`,
+      );
+      setBrief("");
+    } catch (error) {
+      setToast(
+        error instanceof Error ? error.message : "Hunt failed",
+      );
+    } finally {
+      setHunting(false);
+    }
+  }
+
   function addLead(event: React.FormEvent) {
     event.preventDefault();
     if (!leadUrl.trim() || adding) return;
@@ -1167,6 +1244,19 @@ export function Dashboard({ displayName }: { displayName: string }) {
                   ),
                 )}
               </div>
+
+              <form className="lead-form hunt-form" onSubmit={runHunt}>
+                <Icon name="radar" />
+                <input
+                  aria-label="What do you want to win"
+                  placeholder="What do you want to win? e.g. headphones, shipped to Germany"
+                  value={brief}
+                  onChange={(event) => setBrief(event.target.value)}
+                />
+                <button disabled={hunting || !brief.trim()}>
+                  {hunting ? "Hunting…" : "Hunt"}
+                </button>
+              </form>
 
               <form className="lead-form" onSubmit={addLead}>
                 <Icon name="link" />
