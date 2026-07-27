@@ -312,6 +312,7 @@ class ContestDiscovery:
                 include_answer=False,
                 include_raw_content=False,
                 exclude_domains=sorted(self.settings.blocked_hosts) or None,
+                time_range=self.settings.DISCOVERY_TIME_RANGE or None,
             )
             return {
                 "query": query,
@@ -431,6 +432,7 @@ class ContestDiscovery:
         )
         page_by_id = {page.contest_id: page for page in pages}
         rejections: list[RejectionNote] = []
+        harvested: list[str] = []
         compact_candidates = []
         for candidate in candidates:
             candidate_id = int(candidate["candidate_id"])
@@ -445,6 +447,9 @@ class ContestDiscovery:
                         + ")",
                     )
                 )
+                # A listing is a directory of the very pages we want. Keep
+                # its outbound links and follow them instead of binning it.
+                harvested.extend(page.contest_links)
                 continue
             compact_candidates.append(
                 {
@@ -462,6 +467,84 @@ class ContestDiscovery:
                     },
                 }
             )
+
+        room = self.settings.MAX_DISCOVERY_CANDIDATES - len(compact_candidates)
+        if harvested and room > 0:
+            follow: list[str] = []
+            for link in harvested:
+                parsed_link = urlparse(link)
+                if parsed_link.scheme not in {"http", "https"}:
+                    continue
+                normalized_link = normalize_url(link)
+                link_host = (
+                    parsed_link.hostname or ""
+                ).lower().removeprefix("www.")
+                if (
+                    normalized_link in known_urls
+                    or normalized_link in seen_urls
+                    or link_host in blocked_hosts
+                ):
+                    continue
+                seen_urls.add(normalized_link)
+                follow.append(link)
+                if len(follow) >= min(
+                    room, self.settings.DISCOVERY_MAX_HARVESTED
+                ):
+                    break
+
+            if follow:
+                extra_pages = await asyncio.gather(
+                    *[
+                        self.page_fetcher(
+                            ContestInput(
+                                id=len(candidates) + offset + 1,
+                                slug=f"harvested-{offset + 1}",
+                                title="Harvested from a listing",
+                                organizer=(
+                                    urlparse(link).hostname or "Unknown"
+                                ).removeprefix("www."),
+                                prize="Needs verification",
+                                url=link,
+                                deadline=fallback_deadline,
+                            ),
+                            self.settings,
+                        )
+                        for offset, link in enumerate(follow)
+                    ]
+                )
+                for page in extra_pages:
+                    if (
+                        not page.reachable
+                        or page.hub_score
+                        > self.settings.DISCOVERY_MAX_HUB_SCORE
+                    ):
+                        continue
+                    candidate = {
+                        "candidate_id": page.contest_id,
+                        "title": page.title or page.final_url,
+                        "url": page.final_url,
+                        "search_snippet": page.excerpt[:1_600],
+                        "source_query": "followed from a listing page",
+                    }
+                    candidates.append(candidate)
+                    compact_candidates.append(
+                        {
+                            **candidate,
+                            "page": {
+                                "final_url": page.final_url,
+                                "status_code": page.status_code,
+                                "reachable": page.reachable,
+                                "title": page.title,
+                                "entry_signals": page.entry_signals,
+                                "registration_signals": (
+                                    page.registration_signals
+                                ),
+                                "hub_signals": page.hub_signals,
+                                "hub_score": page.hub_score,
+                                "excerpt": page.excerpt[:5_000],
+                            },
+                        }
+                    )
 
         if not compact_candidates:
             return DiscoveryResponse(

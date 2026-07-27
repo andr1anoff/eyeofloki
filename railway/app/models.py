@@ -145,6 +145,7 @@ class PageEvidence(StrictModel):
     registration_signals: list[str]
     hub_signals: list[str] = Field(default_factory=list)
     hub_score: int = Field(default=0, ge=0, le=100)
+    contest_links: list[str] = Field(default_factory=list, max_length=40)
 
 
 class ModelAssessment(StrictModel):

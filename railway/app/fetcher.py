@@ -31,20 +31,21 @@ REGISTRATION_SIGNALS = {
 
 # A page that lists many contests is an aggregator, not an entry point.
 # These are the single biggest source of wasted Gemini calls.
-def _hub_signals(html: str, soup) -> tuple[list[str], int]:
+def _hub_signals(html: str, soup) -> tuple[list[str], int, list[str]]:
     lowered = html.lower()
     signals: list[str] = []
     mentions = lowered.count("gewinnspiel") + lowered.count("verlosung")
     forms = lowered.count("<form")
     links = len(soup.find_all("a", href=True))
-    contest_links = sum(
-        1
+    outbound = [
+        anchor["href"]
         for anchor in soup.find_all("a", href=True)
         if any(
             token in (anchor.get("href") or "").lower()
-            for token in ("gewinnspiel", "verlosung", "wettbewerb")
+            for token in ("gewinnspiel", "verlosung", "wettbewerb", "giveaway")
         )
-    )
+    ]
+    contest_links = len(outbound)
     deadlines = lowered.count("einsendeschluss") + lowered.count(
         "teilnahmeschluss"
     )
@@ -68,7 +69,7 @@ def _hub_signals(html: str, soup) -> tuple[list[str], int]:
     if links >= 120 and forms <= 1:
         signals.append("link-heavy index layout")
         score += 10
-    return signals, min(100, score)
+    return signals, min(100, score), outbound[:40]
 
 
 async def _assert_public_host(url: str) -> None:
@@ -98,11 +99,11 @@ async def _assert_public_host(url: str) -> None:
 def _page_text(html: str) -> tuple[str, str, list[str], int]:
     soup = BeautifulSoup(html, "html.parser")
     title = soup.title.get_text(" ", strip=True) if soup.title else ""
-    hub_signals, hub_score = _hub_signals(html, soup)
+    hub_signals, hub_score, outbound = _hub_signals(html, soup)
     for node in soup(["script", "style", "noscript", "svg"]):
         node.decompose()
     text = " ".join(soup.get_text(" ", strip=True).split())
-    return title[:240], text[:16_000], hub_signals, hub_score
+    return title[:240], text[:16_000], hub_signals, hub_score, outbound
 
 
 async def fetch_contest_page(
@@ -140,7 +141,13 @@ async def fetch_contest_page(
 
             html = response.text[:750_000]
             lowered = html.lower()
-            title, excerpt, hub_signals, hub_score = _page_text(html)
+            (
+                title,
+                excerpt,
+                hub_signals,
+                hub_score,
+                outbound,
+            ) = _page_text(html)
             return PageEvidence(
                 contest_id=contest.id,
                 final_url=current_url,
@@ -160,6 +167,9 @@ async def fetch_contest_page(
                 ],
                 hub_signals=hub_signals,
                 hub_score=hub_score,
+                contest_links=[
+                    urljoin(str(response.url), href) for href in outbound
+                ],
             )
     except Exception as exc:
         return PageEvidence(
@@ -173,4 +183,5 @@ async def fetch_contest_page(
             registration_signals=[],
             hub_signals=[],
             hub_score=0,
+            contest_links=[],
         )

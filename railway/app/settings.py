@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     DISCOVERY_MIN_SCORE: int = 55
     DISCOVERY_MIN_CHANCE_PPM: int = 300
     DISCOVERY_MAX_HUB_SCORE: int = 45
+    DISCOVERY_TIME_RANGE: str = "month"
+    DISCOVERY_MAX_HARVESTED: int = 8
     DISCOVERY_BLOCKED_HOSTS: str = ""
 
     @property

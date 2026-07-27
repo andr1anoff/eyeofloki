@@ -254,7 +254,7 @@ def test_listing_pages_are_flagged_as_hubs() -> None:
     from railway.app.fetcher import _hub_signals
 
     html = _listing_html()
-    signals, score = _hub_signals(html, BeautifulSoup(html, "html.parser"))
+    signals, score, _links = _hub_signals(html, BeautifulSoup(html, "html.parser"))
     assert score > 45
     assert signals
 
@@ -270,7 +270,7 @@ def test_single_contest_page_is_not_flagged() -> None:
         '<form><input name="email"><button type="submit">Absenden</button>'
         "</form></body></html>"
     )
-    signals, score = _hub_signals(html, BeautifulSoup(html, "html.parser"))
+    signals, score, _links = _hub_signals(html, BeautifulSoup(html, "html.parser"))
     assert score == 0
     assert signals == []
 
@@ -340,5 +340,62 @@ def test_event_index_without_its_own_form_is_a_hub() -> None:
         "<p>Verlosung Verlosung Verlosung Verlosung Verlosung Verlosung</p>"
         f"<form></form>{links}</body></html>"
     )
-    _signals, score = _hub_signals(html, BeautifulSoup(html, "html.parser"))
+    _signals, score, _links = _hub_signals(html, BeautifulSoup(html, "html.parser"))
     assert score > 45
+
+
+def test_listing_links_are_followed_instead_of_binned() -> None:
+    """The whole point: a hub is a directory of the pages we want."""
+
+    async def fetcher(contest, _settings):
+        url = str(contest.url)
+        if "listing" in url:
+            return PageEvidence(
+                contest_id=contest.id, final_url=url, status_code=200,
+                reachable=True, title="Alle Gewinnspiele",
+                excerpt="Uebersicht", entry_signals=[],
+                registration_signals=[],
+                hub_signals=["20 links to other contests"], hub_score=90,
+                contest_links=[
+                    "https://brand.example/gewinnspiel/kopfhoerer",
+                    "https://brand.example/gewinnspiel/tablet",
+                ],
+            )
+        return PageEvidence(
+            contest_id=contest.id, final_url=url, status_code=200,
+            reachable=True, title="Wir verlosen Kopfhoerer",
+            excerpt="Teilnahmeschluss 30.09.2026", entry_signals=["form"],
+            registration_signals=[], hub_signals=[], hub_score=0,
+            contest_links=[],
+        )
+
+    class ListingSearch:
+        async def search(self, **_kw):
+            return {
+                "results": [
+                    {
+                        "url": "https://portal.example/listing",
+                        "title": "Alle Gewinnspiele im Ueberblick",
+                        "content": "Gewinnspiel Verlosung teilnehmen",
+                    }
+                ]
+            }
+
+    models = FakeDiscoveryModels()
+    gemini = SimpleNamespace(aio=SimpleNamespace(models=models))
+    engine = ContestDiscovery(
+        Settings(GEMINI_API_KEY="test", TAVILY_API_KEY="test",
+                 DISCOVERY_QUERIES_PER_RUN=1),
+        genai_client=gemini,
+        search_client=ListingSearch(),
+        page_fetcher=fetcher,
+    )
+    result = asyncio.run(engine.discover(DiscoveryRequest(round=0)))
+
+    # The listing itself is rejected, but its two links became candidates.
+    assert any("aggregator" in n.reason for n in result.rejections)
+    assert models.calls, "harvested candidates must reach the model"
+    sent = str(models.calls[0])
+    assert "gewinnspiel/kopfhoerer" in sent
+    assert "gewinnspiel/tablet" in sent
+    assert "portal.example/listing" not in sent
