@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     PAGE_FETCH_TIMEOUT_SECONDS: float = 10.0
     MAX_CONTESTS_PER_RECON: int = 10
     SEARCH_RESULTS_PER_CONTEST: int = 4
+    DISCOVERY_QUERIES_PER_RUN: int = 8
+    DISCOVERY_RESULTS_PER_QUERY: int = 8
+    MAX_DISCOVERY_CANDIDATES: int = 18
+    DISCOVERY_MIN_SCORE: int = 45
 
     @property
     def allowed_origins(self) -> list[str]:

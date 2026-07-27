@@ -65,6 +65,14 @@ class ReconRequest(StrictModel):
     profile: UserProfile = Field(default_factory=UserProfile)
 
 
+class DiscoveryRequest(StrictModel):
+    known_urls: list[HttpUrl] = Field(default_factory=list, max_length=1_000)
+    known_titles: list[str] = Field(default_factory=list, max_length=1_000)
+    round: int = Field(default=0, ge=0, le=1_000_000)
+    limit: int = Field(default=12, ge=1, le=20)
+    profile: UserProfile = Field(default_factory=UserProfile)
+
+
 class PageEvidence(StrictModel):
     contest_id: int
     final_url: str
@@ -122,6 +130,60 @@ class AssessmentBundle(StrictModel):
     assessments: list[ModelAssessment]
 
 
+class DiscoveryAssessment(StrictModel):
+    candidate_id: int
+    title: str = Field(min_length=3, max_length=240)
+    organizer: str = Field(min_length=2, max_length=180)
+    prize: str = Field(min_length=2, max_length=320)
+    locality: str = Field(min_length=2, max_length=120)
+    eligibility: str = Field(min_length=2, max_length=420)
+    entry_method: str = Field(min_length=2, max_length=420)
+    active: bool
+    free_entry: bool
+    germany_eligible: bool
+    entry_mechanism_found: bool
+    registration_required: bool
+    newsletter_required: bool
+    corrected_deadline: str = Field(
+        description="Exact calendar date in YYYY-MM-DD format"
+    )
+    corrected_winners: int = Field(ge=1, le=100_000)
+    entrants_low: int = Field(ge=1, le=100_000_000)
+    entrants_likely: int = Field(ge=1, le=100_000_000)
+    entrants_high: int = Field(ge=1, le=100_000_000)
+    competition: CompetitionLevel
+    confidence: ConfidenceLevel
+    prize_utility: int = Field(ge=0, le=100)
+    legitimacy: int = Field(ge=0, le=100)
+    locality_fit: int = Field(ge=0, le=100)
+    friction_minutes: float = Field(ge=0, le=240)
+    summary: str = Field(min_length=1, max_length=420)
+    reasons: list[str] = Field(min_length=2, max_length=4)
+    evidence_urls: list[str] = Field(min_length=1, max_length=6)
+    blocking_reason: str
+
+    @field_validator("corrected_deadline", mode="before")
+    @classmethod
+    def deadline_is_iso_date(cls, value: object) -> str:
+        if not isinstance(value, str):
+            raise ValueError("deadline must be an ISO date")
+        candidate = value.strip()[:10]
+        date.fromisoformat(candidate)
+        return candidate
+
+    @model_validator(mode="after")
+    def entrants_are_ordered(self) -> "DiscoveryAssessment":
+        ordered = sorted(
+            [self.entrants_low, self.entrants_likely, self.entrants_high]
+        )
+        self.entrants_low, self.entrants_likely, self.entrants_high = ordered
+        return self
+
+
+class DiscoveryAssessmentBundle(StrictModel):
+    assessments: list[DiscoveryAssessment]
+
+
 class ScoreBreakdown(StrictModel):
     chance: int
     prize: int
@@ -160,5 +222,30 @@ class ContestAnalysis(StrictModel):
 
 class ReconResponse(StrictModel):
     analyses: list[ContestAnalysis]
+    model: str
+    analyzed_at: str
+
+
+class DiscoveryItem(StrictModel):
+    slug: str
+    title: str
+    organizer: str
+    prize: str
+    url: str
+    locality: str
+    eligibility: str
+    entry_method: str
+    analysis: ContestAnalysis
+
+
+class DiscoveryResponse(StrictModel):
+    discoveries: list[DiscoveryItem]
+    searched_queries: int
+    raw_candidates: int
+    novel_candidates: int
+    analyzed_candidates: int
+    rejected_candidates: int
+    search_errors: int
+    round: int
     model: str
     analyzed_at: str

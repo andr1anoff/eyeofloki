@@ -11,11 +11,12 @@ def test_health_exposes_configuration_state_without_secrets() -> None:
     assert response.json() == {
         "ok": True,
         "service": "eye-of-loki-intelligence",
-        "version": "3.0.0",
+        "version": "4.0.0",
         "model": "gemini-3.5-flash-lite",
         "gemini_configured": False,
         "search_configured": False,
         "auth_configured": False,
+        "capabilities": ["discovery", "verification"],
     }
 
 
@@ -42,3 +43,13 @@ def test_recon_refuses_requests_until_shared_secret_is_configured() -> None:
     assert response.json()["detail"] == (
         "EYE_OF_LOKI_SHARED_SECRET is not configured"
     )
+
+
+def test_discovery_refuses_requests_until_shared_secret_is_configured() -> None:
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/discover",
+            json={"known_urls": [], "known_titles": [], "round": 0},
+        )
+
+    assert response.status_code == 503
