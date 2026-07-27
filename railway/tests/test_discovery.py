@@ -71,6 +71,10 @@ class FakeDiscoveryModels:
                             "prize_utility": 80,
                             "legitimacy": 95,
                             "locality_fit": 100,
+                            "prize_delivery": "location_bound",
+                            "prize_value_eur": 60,
+                    "prize_delivery": "location_bound",
+                    "prize_value_eur": 60,
                             "friction_minutes": 1,
                             "summary": "A local free-entry ticket giveaway.",
                             "reasons": [
@@ -404,3 +408,26 @@ def test_listing_links_are_followed_instead_of_binned() -> None:
     sent = str(models.calls[0])
     assert "gewinnspiel/kopfhoerer" in sent
     assert "gewinnspiel/tablet" in sent
+
+
+def test_delivery_and_value_survive_the_trip_to_scoring() -> None:
+    """Regression: these fields were dropped in the conversion from the
+    discovery assessment to the scoring model, so every prize came back
+    location_bound and worth nothing."""
+    search = FakeDiscoverySearch()
+    models = FakeDiscoveryModels()
+    gemini = SimpleNamespace(aio=SimpleNamespace(models=models))
+    engine = ContestDiscovery(
+        Settings(GEMINI_API_KEY="test", TAVILY_API_KEY="test",
+                 DISCOVERY_QUERIES_PER_RUN=1, DISCOVERY_MIN_SCORE=0,
+                 DISCOVERY_MIN_CHANCE_PPM=0),
+        genai_client=gemini,
+        search_client=search,
+        page_fetcher=fake_page_fetcher,
+    )
+    result = asyncio.run(engine.discover(DiscoveryRequest(round=0)))
+
+    analysis = result.discoveries[0].analysis
+    assert analysis.prize_value_eur == 60
+    assert analysis.prize_delivery == "location_bound"
+    assert analysis.ev_cents_per_minute > 0

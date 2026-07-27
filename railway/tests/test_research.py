@@ -51,6 +51,8 @@ class FakeModels:
                             "prize_utility": 70,
                             "legitimacy": 90,
                             "locality_fit": 80,
+                            "prize_delivery": "location_bound",
+                            "prize_value_eur": 60,
                             "friction_minutes": 2,
                             "summary": "A legitimate short-form contest.",
                             "reasons": ["Official rules found", "No account"],

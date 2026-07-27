@@ -22,6 +22,8 @@ def assessment(**overrides):
         "prize_utility": 80,
         "legitimacy": 95,
         "locality_fit": 100,
+        "prize_delivery": "location_bound",
+        "prize_value_eur": 60,
         "friction_minutes": 1,
         "summary": "Local contest with several winners.",
         "reasons": ["Local", "Twenty winners"],

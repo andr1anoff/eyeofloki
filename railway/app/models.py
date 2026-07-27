@@ -166,9 +166,9 @@ class ModelAssessment(StrictModel):
     prize_utility: int = Field(ge=0, le=100)
     legitimacy: int = Field(ge=0, le=100)
     locality_fit: int = Field(ge=0, le=100)
-    prize_delivery: PrizeDelivery = "location_bound"
+    prize_delivery: PrizeDelivery
     ships_to_germany: bool = True
-    prize_value_eur: int = Field(default=0, ge=0, le=200_000)
+    prize_value_eur: int = Field(ge=0, le=200_000)
     entry_cadence: EntryCadence = "once"
     friction_minutes: float = Field(ge=0, le=240)
     summary: str = Field(min_length=1, max_length=420)
@@ -225,9 +225,9 @@ class DiscoveryAssessment(StrictModel):
     prize_utility: int = Field(ge=0, le=100)
     legitimacy: int = Field(ge=0, le=100)
     locality_fit: int = Field(ge=0, le=100)
-    prize_delivery: PrizeDelivery = "location_bound"
+    prize_delivery: PrizeDelivery
     ships_to_germany: bool = True
-    prize_value_eur: int = Field(default=0, ge=0, le=200_000)
+    prize_value_eur: int = Field(ge=0, le=200_000)
     entry_cadence: EntryCadence = "once"
     friction_minutes: float = Field(ge=0, le=240)
     summary: str = Field(min_length=1, max_length=420)

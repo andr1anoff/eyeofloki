@@ -42,7 +42,9 @@ certainly a listing.
 
 Otherwise accept only when evidence supports all of the following:
 - entry is free and does not require a purchase or gambling stake
-- an adult resident of Germany is eligible
+- an adult resident of Germany is eligible. Contests open to the EU, the EEA,
+  Europe or "worldwide" all qualify; germany_eligible is false only when the
+  rules exclude Germany or restrict entry to another country's residents
 - the deadline has not passed
 - one specific, working entry mechanism exists on this page
 - the organiser and prize look legitimate
@@ -65,8 +67,19 @@ geography matters:
   user's reachable_for_events area; score locality_fit against that and be
   harsh about distance.
 
-Set prize_value_eur to the realistic retail value in euros of what one winner
-receives, 0 when you cannot tell.
+Always set prize_value_eur to your best estimate of the retail value in euros
+of what one winner receives. Never return 0 for a real prize: if the page does
+not state a value, estimate from the category -- a pair of wireless headphones
+is roughly 100, a games console 400, a weekend hotel stay 300, a pair of
+concert tickets 80, a book 20, a branded t-shirt 25. A rough figure is far
+more useful than a zero, which silently removes the contest from ranking.
+
+Choose prize_delivery from the prize itself, never as a fallback. Headphones,
+a keyboard, a console, clothing, a hamper, a bike: "shipped". A voucher code,
+a game key, a subscription, a gift card: "digital". Only things the winner
+must physically attend -- tickets, guest lists, hotel stays, meals, tours,
+workshops -- are "location_bound". When a prize bundles both, classify by the
+larger part.
 
 Set entry_cadence to how often the same person may enter: "once", or "daily",
 "weekly" or "monthly" when the rules allow repeat entries. Only use a repeat
@@ -622,6 +635,10 @@ class ContestDiscovery:
                     prize_utility=assessment.prize_utility,
                     legitimacy=assessment.legitimacy,
                     locality_fit=assessment.locality_fit,
+                    prize_delivery=assessment.prize_delivery,
+                    ships_to_germany=assessment.ships_to_germany,
+                    prize_value_eur=assessment.prize_value_eur,
+                    entry_cadence=assessment.entry_cadence,
                     friction_minutes=assessment.friction_minutes,
                     summary=assessment.summary,
                     reasons=assessment.reasons,
@@ -672,7 +689,13 @@ class ContestDiscovery:
         # Rank the survivors by score before truncating, so the limit keeps
         # the best finds rather than whichever the model happened to emit
         # first. Truncation is not rejection and is counted separately.
-        discoveries.sort(key=lambda item: item.analysis.score, reverse=True)
+        discoveries.sort(
+            key=lambda item: (
+                item.analysis.ev_cents_per_minute,
+                item.analysis.score,
+            ),
+            reverse=True,
+        )
         truncated = max(0, len(discoveries) - request.limit)
         discoveries = discoveries[: request.limit]
 

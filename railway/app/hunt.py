@@ -34,8 +34,15 @@ Rules:
   Use the wording those pages use: German "Gewinnspiel", "Verlosung",
   "Einsendeschluss", "Teilnahmeschluss", "ohne Kauf"; English "giveaway",
   "free entry", "no purchase", "enter to win", "deadline".
-- Mix German and English. Most EU-wide giveaways are in English, most
-  German-only ones are not.
+- Mix German and English, weighted by prize type. For anything that arrives
+  by post or download, most of the supply is English-language and EU- or
+  worldwide-open, so lead with English and include the phrasings those pages
+  use: "open to EU residents", "ships worldwide", "international giveaway",
+  "no purchase necessary". Keep German for prizes tied to a German-speaking
+  venue or audience.
+- Do not translate a query into other EU languages. National contests in
+  French, Dutch, Polish or Spanish almost always restrict entry to their own
+  residents, so they cost a verification call and return nothing.
 - direct_queries: the literal reading of the brief.
 - adjacent_queries: neighbouring prize categories the user would plausibly
   still be happy to win, and broader phrasings of the same want. These run
