@@ -7,14 +7,14 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .fetcher import fetch_contest_page
 from .models import ReconRequest, ReconResponse
-from .research import OpenAIContestAnalyst
+from .research import GeminiContestAnalyst
 from .scoring import score_assessment
 from .settings import Settings, get_settings
 
 
 app = FastAPI(
     title="Eye of Loki Intelligence Service",
-    version="2.0.0",
+    version="3.0.0",
     docs_url=None,
     redoc_url=None,
 )
@@ -48,9 +48,10 @@ async def health(runtime: Settings = Depends(get_settings)) -> dict[str, object]
     return {
         "ok": True,
         "service": "eye-of-loki-intelligence",
-        "version": "2.0.0",
-        "model": runtime.OPENAI_MODEL,
-        "openai_configured": bool(runtime.OPENAI_API_KEY),
+        "version": "3.0.0",
+        "model": runtime.GEMINI_MODEL,
+        "gemini_configured": bool(runtime.GEMINI_API_KEY),
+        "search_configured": bool(runtime.TAVILY_API_KEY),
         "auth_configured": bool(runtime.EYE_OF_LOKI_SHARED_SECRET),
     }
 
@@ -69,8 +70,10 @@ async def recon(
             status_code=400,
             detail=f"Maximum {runtime.MAX_CONTESTS_PER_RECON} contests per run",
         )
-    if not runtime.OPENAI_API_KEY:
-        raise HTTPException(status_code=503, detail="OPENAI_API_KEY is missing")
+    if not runtime.GEMINI_API_KEY:
+        raise HTTPException(status_code=503, detail="GEMINI_API_KEY is missing")
+    if not runtime.TAVILY_API_KEY:
+        raise HTTPException(status_code=503, detail="TAVILY_API_KEY is missing")
 
     pages = await asyncio.gather(
         *[
@@ -78,7 +81,7 @@ async def recon(
             for contest in request.contests
         ]
     )
-    analyst = OpenAIContestAnalyst(runtime)
+    analyst = GeminiContestAnalyst(runtime)
     try:
         assessments = await analyst.analyze(
             request.contests,
@@ -88,13 +91,13 @@ async def recon(
     except Exception as exc:
         raise HTTPException(
             status_code=502,
-            detail=f"OpenAI analysis failed: {type(exc).__name__}: {exc}",
+            detail=f"Gemini analysis failed: {type(exc).__name__}: {exc}",
         ) from exc
 
     analyzed_at = datetime.now(timezone.utc).isoformat()
     analyses = [score_assessment(assessment) for assessment in assessments]
     return ReconResponse(
         analyses=analyses,
-        model=runtime.OPENAI_MODEL,
+        model=runtime.GEMINI_MODEL,
         analyzed_at=analyzed_at,
     )

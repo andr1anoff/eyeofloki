@@ -11,9 +11,10 @@ def test_health_exposes_configuration_state_without_secrets() -> None:
     assert response.json() == {
         "ok": True,
         "service": "eye-of-loki-intelligence",
-        "version": "2.0.0",
-        "model": "gpt-5.6-sol",
-        "openai_configured": False,
+        "version": "3.0.0",
+        "model": "gemini-3.5-flash-lite",
+        "gemini_configured": False,
+        "search_configured": False,
         "auth_configured": False,
     }
 
