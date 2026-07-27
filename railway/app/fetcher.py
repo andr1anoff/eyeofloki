@@ -29,6 +29,48 @@ REGISTRATION_SIGNALS = {
 }
 
 
+# A page that lists many contests is an aggregator, not an entry point.
+# These are the single biggest source of wasted Gemini calls.
+def _hub_signals(html: str, soup) -> tuple[list[str], int]:
+    lowered = html.lower()
+    signals: list[str] = []
+    mentions = lowered.count("gewinnspiel") + lowered.count("verlosung")
+    forms = lowered.count("<form")
+    links = len(soup.find_all("a", href=True))
+    contest_links = sum(
+        1
+        for anchor in soup.find_all("a", href=True)
+        if any(
+            token in (anchor.get("href") or "").lower()
+            for token in ("gewinnspiel", "verlosung", "wettbewerb")
+        )
+    )
+    deadlines = lowered.count("einsendeschluss") + lowered.count(
+        "teilnahmeschluss"
+    )
+
+    score = 0
+    if contest_links >= 4:
+        signals.append(f"{contest_links} links to other contests")
+        score += 45
+    if mentions >= 12:
+        signals.append(f"the word appears {mentions} times")
+        score += 25
+    if deadlines >= 3:
+        signals.append(f"{deadlines} separate deadlines on one page")
+        score += 25
+    if forms == 0 and contest_links >= 2:
+        signals.append("no form of its own")
+        score += 20
+    if mentions >= 6 and links >= 150 and forms <= 1:
+        signals.append("event index with no entry form of its own")
+        score += 50
+    if links >= 120 and forms <= 1:
+        signals.append("link-heavy index layout")
+        score += 10
+    return signals, min(100, score)
+
+
 async def _assert_public_host(url: str) -> None:
     parsed = urlparse(url)
     if parsed.scheme not in {"http", "https"} or not parsed.hostname:
@@ -53,13 +95,14 @@ async def _assert_public_host(url: str) -> None:
             raise ValueError("Private or reserved network targets are blocked")
 
 
-def _page_text(html: str) -> tuple[str, str]:
+def _page_text(html: str) -> tuple[str, str, list[str], int]:
     soup = BeautifulSoup(html, "html.parser")
     title = soup.title.get_text(" ", strip=True) if soup.title else ""
+    hub_signals, hub_score = _hub_signals(html, soup)
     for node in soup(["script", "style", "noscript", "svg"]):
         node.decompose()
     text = " ".join(soup.get_text(" ", strip=True).split())
-    return title[:240], text[:16_000]
+    return title[:240], text[:16_000], hub_signals, hub_score
 
 
 async def fetch_contest_page(
@@ -97,7 +140,7 @@ async def fetch_contest_page(
 
             html = response.text[:750_000]
             lowered = html.lower()
-            title, excerpt = _page_text(html)
+            title, excerpt, hub_signals, hub_score = _page_text(html)
             return PageEvidence(
                 contest_id=contest.id,
                 final_url=current_url,
@@ -115,6 +158,8 @@ async def fetch_contest_page(
                     for token, label in REGISTRATION_SIGNALS.items()
                     if token in lowered
                 ],
+                hub_signals=hub_signals,
+                hub_score=hub_score,
             )
     except Exception as exc:
         return PageEvidence(
@@ -126,4 +171,6 @@ async def fetch_contest_page(
             excerpt=f"Fetch failed: {type(exc).__name__}",
             entry_signals=[],
             registration_signals=[],
+            hub_signals=[],
+            hub_score=0,
         )

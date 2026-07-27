@@ -48,6 +48,19 @@ class UserProfile(StrictModel):
         ],
         max_length=20,
     )
+    avoid_prizes: list[str] = Field(
+        default_factory=lambda: [
+            "gardening and garden furniture",
+            "cruises and coach tours",
+            "spa, wellness and beauty",
+            "kitchen and household appliances",
+            "craft, knitting and hobby kits",
+            "health supplements and medical devices",
+            "children's and baby products",
+            "insurance, banking and utility signups",
+        ],
+        max_length=20,
+    )
     friction_penalties: list[str] = Field(
         default_factory=lambda: [
             "mandatory account",
@@ -82,6 +95,8 @@ class PageEvidence(StrictModel):
     excerpt: str
     entry_signals: list[str]
     registration_signals: list[str]
+    hub_signals: list[str] = Field(default_factory=list)
+    hub_score: int = Field(default=0, ge=0, le=100)
 
 
 class ModelAssessment(StrictModel):
@@ -132,6 +147,7 @@ class AssessmentBundle(StrictModel):
 
 class DiscoveryAssessment(StrictModel):
     candidate_id: int
+    is_aggregator: bool = False
     title: str = Field(min_length=3, max_length=240)
     organizer: str = Field(min_length=2, max_length=180)
     prize: str = Field(min_length=2, max_length=320)

@@ -237,3 +237,108 @@ def test_rejections_name_the_host_and_the_reason() -> None:
     note = result.rejections[0]
     assert note.host == "known.example"
     assert note.reason.startswith("score ")
+
+
+def _listing_html(count: int = 8) -> str:
+    items = "".join(
+        f'<a href="/gewinnspiel/{i}">Gewinnspiel {i}</a>'
+        f"<p>Verlosung. Einsendeschluss ist der 0{i}.08.2026.</p>"
+        for i in range(1, count + 1)
+    )
+    return f"<html><head><title>Alle Gewinnspiele</title></head><body>{items}</body></html>"
+
+
+def test_listing_pages_are_flagged_as_hubs() -> None:
+    from bs4 import BeautifulSoup
+
+    from railway.app.fetcher import _hub_signals
+
+    html = _listing_html()
+    signals, score = _hub_signals(html, BeautifulSoup(html, "html.parser"))
+    assert score > 45
+    assert signals
+
+
+def test_single_contest_page_is_not_flagged() -> None:
+    from bs4 import BeautifulSoup
+
+    from railway.app.fetcher import _hub_signals
+
+    html = (
+        "<html><head><title>Wir verlosen 2x2 Tickets</title></head><body>"
+        "<p>Gewinnspiel: Einsendeschluss ist der 09.08.2026.</p>"
+        '<form><input name="email"><button type="submit">Absenden</button>'
+        "</form></body></html>"
+    )
+    signals, score = _hub_signals(html, BeautifulSoup(html, "html.parser"))
+    assert score == 0
+    assert signals == []
+
+
+def test_hub_candidates_never_reach_the_model() -> None:
+    async def hub_page_fetcher(contest, _settings):
+        return PageEvidence(
+            contest_id=contest.id,
+            final_url=str(contest.url),
+            status_code=200,
+            reachable=True,
+            title=contest.title,
+            excerpt="Alle Gewinnspiele auf einen Blick.",
+            entry_signals=[],
+            registration_signals=[],
+            hub_signals=["12 links to other contests"],
+            hub_score=90,
+        )
+
+    search = FakeDiscoverySearch()
+    models = FakeDiscoveryModels()
+    gemini = SimpleNamespace(aio=SimpleNamespace(models=models))
+    engine = ContestDiscovery(
+        Settings(GEMINI_API_KEY="test", TAVILY_API_KEY="test",
+                 DISCOVERY_QUERIES_PER_RUN=1),
+        genai_client=gemini,
+        search_client=search,
+        page_fetcher=hub_page_fetcher,
+    )
+    result = asyncio.run(engine.discover(DiscoveryRequest(round=0)))
+
+    assert models.calls == []
+    assert result.analyzed_candidates == 0
+    assert len(result.rejections) == 2
+    assert all("aggregator" in n.reason for n in result.rejections)
+
+
+def test_long_odds_are_dropped_by_the_floor() -> None:
+    search = FakeDiscoverySearch()
+    models = FakeDiscoveryModels()
+    gemini = SimpleNamespace(aio=SimpleNamespace(models=models))
+    engine = ContestDiscovery(
+        Settings(GEMINI_API_KEY="test", TAVILY_API_KEY="test",
+                 DISCOVERY_QUERIES_PER_RUN=1,
+                 DISCOVERY_MIN_SCORE=0,
+                 DISCOVERY_MIN_CHANCE_PPM=999_999),
+        genai_client=gemini,
+        search_client=search,
+        page_fetcher=fake_page_fetcher,
+    )
+    result = asyncio.run(engine.discover(DiscoveryRequest(round=0)))
+
+    assert result.discoveries == []
+    assert "ppm below floor" in result.rejections[0].reason
+
+
+def test_event_index_without_its_own_form_is_a_hub() -> None:
+    from bs4 import BeautifulSoup
+
+    from railway.app.fetcher import _hub_signals
+
+    links = "".join(
+        f'<a href="/event/{i}">Konzert {i}</a>' for i in range(200)
+    )
+    html = (
+        "<html><head><title>Alle Partys</title></head><body>"
+        "<p>Verlosung Verlosung Verlosung Verlosung Verlosung Verlosung</p>"
+        f"<form></form>{links}</body></html>"
+    )
+    _signals, score = _hub_signals(html, BeautifulSoup(html, "html.parser"))
+    assert score > 45
