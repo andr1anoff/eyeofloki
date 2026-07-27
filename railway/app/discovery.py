@@ -20,6 +20,7 @@ from .models import (
     DiscoveryResponse,
     ModelAssessment,
     PageEvidence,
+    RejectionNote,
 )
 from .scoring import score_assessment
 from .settings import Settings
@@ -179,6 +180,26 @@ def _matches_known_title(candidate: str, known: set[str]) -> bool:
         or (len(item) >= 14 and item in candidate)
         for item in known
     )
+
+
+def _rejection_reason(
+    assessment: DiscoveryAssessment,
+    score: int,
+    minimum: int,
+) -> str:
+    if not assessment.active:
+        return "inactive"
+    if not assessment.free_entry:
+        return "entry not free"
+    if not assessment.germany_eligible:
+        return "not open to Germany"
+    if not assessment.entry_mechanism_found:
+        return "no working entry mechanism"
+    if date.fromisoformat(assessment.corrected_deadline) < date.today():
+        return "deadline passed"
+    if assessment.legitimacy < 60:
+        return f"legitimacy {assessment.legitimacy}"
+    return f"score {score} below minimum {minimum}"
 
 
 PageFetcher = Callable[[ContestInput, Settings], Awaitable[PageEvidence]]
@@ -386,7 +407,7 @@ class ContestDiscovery:
             for candidate in candidates
         }
         discoveries: list[DiscoveryItem] = []
-        rejected = 0
+        rejections: list[RejectionNote] = []
 
         for assessment in bundle.assessments:
             candidate = candidate_by_id.get(assessment.candidate_id)
@@ -429,7 +450,21 @@ class ContestDiscovery:
                 not assessment_is_eligible
                 or scored.score < self.settings.DISCOVERY_MIN_SCORE
             ):
-                rejected += 1
+                dropped_url = str(candidate["url"])
+                rejections.append(
+                    RejectionNote(
+                        host=(
+                            urlparse(dropped_url).hostname or "unknown"
+                        ).removeprefix("www."),
+                        url=dropped_url,
+                        title=str(candidate["title"])[:120],
+                        reason=_rejection_reason(
+                            assessment,
+                            scored.score,
+                            self.settings.DISCOVERY_MIN_SCORE,
+                        ),
+                    )
+                )
                 continue
             source_url = str(candidate["url"])
             if source_url not in scored.evidence_urls:
@@ -465,8 +500,9 @@ class ContestDiscovery:
             raw_candidates=raw_candidates,
             novel_candidates=len(candidates),
             analyzed_candidates=len(bundle.assessments),
-            rejected_candidates=rejected,
+            rejected_candidates=len(rejections),
             truncated_candidates=truncated,
+            rejections=rejections,
             search_errors=search_errors,
             round=request.round,
             model=self.settings.GEMINI_MODEL,

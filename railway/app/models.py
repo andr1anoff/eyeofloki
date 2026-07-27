@@ -239,6 +239,16 @@ class DiscoveryItem(StrictModel):
     analysis: ContestAnalysis
 
 
+class RejectionNote(StrictModel):
+    """Why one candidate that already cost a Gemini call was dropped.
+    Feeds DISCOVERY_BLOCKED_HOSTS: hosts that never convert."""
+
+    host: str
+    url: str
+    title: str
+    reason: str
+
+
 class DiscoveryResponse(StrictModel):
     discoveries: list[DiscoveryItem]
     searched_queries: int
@@ -247,6 +257,7 @@ class DiscoveryResponse(StrictModel):
     analyzed_candidates: int
     rejected_candidates: int
     truncated_candidates: int = 0
+    rejections: list[RejectionNote] = Field(default_factory=list)
     search_errors: int
     round: int
     model: str

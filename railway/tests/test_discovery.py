@@ -215,3 +215,25 @@ def test_truncation_is_not_counted_as_rejection() -> None:
     assert result.rejected_candidates == 0
     assert result.truncated_candidates == 0
     assert len(result.discoveries) == 1
+
+
+def test_rejections_name_the_host_and_the_reason() -> None:
+    search = FakeDiscoverySearch()
+    models = FakeDiscoveryModels()
+    gemini = SimpleNamespace(aio=SimpleNamespace(models=models))
+    engine = ContestDiscovery(
+        Settings(GEMINI_API_KEY="test", TAVILY_API_KEY="test",
+                 DISCOVERY_QUERIES_PER_RUN=1,
+                 DISCOVERY_MIN_SCORE=99),
+        genai_client=gemini,
+        search_client=search,
+        page_fetcher=fake_page_fetcher,
+    )
+    result = asyncio.run(engine.discover(DiscoveryRequest(round=0)))
+
+    assert result.discoveries == []
+    assert result.rejected_candidates == 1
+    assert len(result.rejections) == 1
+    note = result.rejections[0]
+    assert note.host == "known.example"
+    assert note.reason.startswith("score ")
