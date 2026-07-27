@@ -1,3 +1,6 @@
+import pytest
+from pydantic import ValidationError
+
 from railway.app.models import ModelAssessment
 from railway.app.scoring import probability_ppm, score_assessment
 
@@ -62,3 +65,13 @@ def test_registration_reduces_score():
         assessment(registration_required=True, newsletter_required=True)
     )
     assert gated.score < clean.score
+
+
+def test_deadline_normalizes_full_iso_timestamp():
+    parsed = assessment(corrected_deadline="2026-08-09T00:00:00Z")
+    assert parsed.corrected_deadline == "2026-08-09"
+
+
+def test_impossible_deadline_is_rejected():
+    with pytest.raises(ValidationError):
+        assessment(corrected_deadline="2026-02-31")

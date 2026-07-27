@@ -1,6 +1,14 @@
+from datetime import date
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    HttpUrl,
+    field_validator,
+    model_validator,
+)
 
 
 CompetitionLevel = Literal["Low", "Medium", "High", "Very high"]
@@ -74,7 +82,9 @@ class ModelAssessment(StrictModel):
     entry_mechanism_found: bool
     registration_required: bool
     newsletter_required: bool
-    corrected_deadline: str
+    corrected_deadline: str = Field(
+        description="Exact calendar date in YYYY-MM-DD format"
+    )
     corrected_winners: int = Field(ge=1, le=100_000)
     entrants_low: int = Field(ge=1, le=100_000_000)
     entrants_likely: int = Field(ge=1, le=100_000_000)
@@ -89,6 +99,15 @@ class ModelAssessment(StrictModel):
     reasons: list[str] = Field(min_length=2, max_length=4)
     evidence_urls: list[str] = Field(min_length=1, max_length=6)
     blocking_reason: str
+
+    @field_validator("corrected_deadline", mode="before")
+    @classmethod
+    def deadline_is_iso_date(cls, value: object) -> str:
+        if not isinstance(value, str):
+            raise ValueError("deadline must be an ISO date")
+        candidate = value.strip()[:10]
+        date.fromisoformat(candidate)
+        return candidate
 
     @model_validator(mode="after")
     def entrants_are_ordered(self) -> "ModelAssessment":
