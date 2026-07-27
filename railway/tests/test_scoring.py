@@ -75,3 +75,30 @@ def test_deadline_normalizes_full_iso_timestamp():
 def test_impossible_deadline_is_rejected():
     with pytest.raises(ValidationError):
         assessment(corrected_deadline="2026-02-31")
+
+
+def test_crowd_label_replaces_spurious_precision():
+    crowded = score_assessment(
+        assessment(corrected_winners=1, entrants_low=40_000,
+                   entrants_likely=60_000, entrants_high=90_000)
+    )
+    roomy = score_assessment(
+        assessment(corrected_winners=50, entrants_low=200,
+                   entrants_likely=400, entrants_high=800)
+    )
+    assert crowded.crowd == "Very crowded"
+    assert roomy.crowd == "Few entrants"
+
+
+def test_prize_outweighs_chance_in_the_new_weighting():
+    great_prize_long_odds = score_assessment(
+        assessment(prize_utility=100, corrected_winners=1,
+                   entrants_low=5_000, entrants_likely=9_000,
+                   entrants_high=20_000)
+    )
+    poor_prize_short_odds = score_assessment(
+        assessment(prize_utility=10, corrected_winners=200,
+                   entrants_low=300, entrants_likely=500,
+                   entrants_high=900)
+    )
+    assert great_prize_long_odds.score > poor_prize_short_odds.score

@@ -140,7 +140,7 @@ def test_discovery_excludes_known_urls_and_deduplicates_search_results() -> None
     assert result.discoveries[0].title == "Berlin cinema night"
     assert result.discoveries[0].analysis.status == "READY"
     assert result.discoveries[0].analysis.analysis_method.endswith(
-        "deterministic-score-v4"
+        "deterministic-score-v5"
     )
 
 
@@ -157,3 +157,61 @@ def test_url_normalization_removes_tracking_and_www() -> None:
     assert normalize_url(
         "https://www.example.com/contest/?utm_source=x#entry"
     ) == "https://example.com/contest"
+
+
+def test_deprecated_sampling_parameters_are_not_sent() -> None:
+    search = FakeDiscoverySearch()
+    models = FakeDiscoveryModels()
+    gemini = SimpleNamespace(aio=SimpleNamespace(models=models))
+    engine = ContestDiscovery(
+        Settings(GEMINI_API_KEY="test", TAVILY_API_KEY="test",
+                 DISCOVERY_QUERIES_PER_RUN=1),
+        genai_client=gemini,
+        search_client=search,
+        page_fetcher=fake_page_fetcher,
+    )
+    asyncio.run(engine.discover(DiscoveryRequest(round=0)))
+
+    config = models.calls[0]["config"]
+    assert "temperature" not in config
+    assert "top_p" not in config
+    assert "top_k" not in config
+    assert config["thinking_config"]["thinking_level"] == "medium"
+
+
+def test_blocked_hosts_are_dropped_before_the_model_is_billed() -> None:
+    search = FakeDiscoverySearch()
+    models = FakeDiscoveryModels()
+    gemini = SimpleNamespace(aio=SimpleNamespace(models=models))
+    engine = ContestDiscovery(
+        Settings(GEMINI_API_KEY="test", TAVILY_API_KEY="test",
+                 DISCOVERY_QUERIES_PER_RUN=1,
+                 DISCOVERY_BLOCKED_HOSTS="cinema.example, known.example"),
+        genai_client=gemini,
+        search_client=search,
+        page_fetcher=fake_page_fetcher,
+    )
+    result = asyncio.run(engine.discover(DiscoveryRequest(round=0)))
+
+    assert result.novel_candidates == 0
+    assert result.discoveries == []
+    assert models.calls == []
+
+
+def test_truncation_is_not_counted_as_rejection() -> None:
+    search = FakeDiscoverySearch()
+    models = FakeDiscoveryModels()
+    gemini = SimpleNamespace(aio=SimpleNamespace(models=models))
+    engine = ContestDiscovery(
+        Settings(GEMINI_API_KEY="test", TAVILY_API_KEY="test",
+                 DISCOVERY_QUERIES_PER_RUN=1),
+        genai_client=gemini,
+        search_client=search,
+        page_fetcher=fake_page_fetcher,
+    )
+    result = asyncio.run(
+        engine.discover(DiscoveryRequest(round=0, limit=1))
+    )
+    assert result.rejected_candidates == 0
+    assert result.truncated_candidates == 0
+    assert len(result.discoveries) == 1

@@ -29,6 +29,18 @@ def _friction_score(
     return round(max(0, min(100, score)))
 
 
+def crowd_label(chance_likely_ppm: int) -> str:
+    """Coarse crowd bucket. Deliberately not a number: entrant counts are
+    model estimates with no ground truth, so ppm precision is spurious."""
+    if chance_likely_ppm >= 50_000:
+        return "Few entrants"
+    if chance_likely_ppm >= 10_000:
+        return "Moderate crowd"
+    if chance_likely_ppm >= 1_000:
+        return "Crowded"
+    return "Very crowded"
+
+
 def _urgency_score(deadline: str) -> int:
     try:
         remaining = (date.fromisoformat(deadline) - date.today()).days
@@ -67,13 +79,16 @@ def score_assessment(assessment: ModelAssessment) -> ContestAnalysis:
         urgency=_urgency_score(assessment.corrected_deadline),
     )
 
+    # Chance is derived from an LLM entrant estimate that can never be
+    # verified against an outcome, so it carries less weight than the
+    # observable factors (prize, friction, legitimacy).
     weighted = round(
-        breakdown.chance * 0.32
-        + breakdown.prize * 0.22
-        + breakdown.friction * 0.15
-        + breakdown.legitimacy * 0.12
+        breakdown.chance * 0.18
+        + breakdown.prize * 0.28
+        + breakdown.friction * 0.20
+        + breakdown.legitimacy * 0.16
         + breakdown.locality * 0.10
-        + breakdown.urgency * 0.09
+        + breakdown.urgency * 0.08
     )
 
     blocked = not assessment.active or not assessment.entry_mechanism_found
@@ -92,8 +107,10 @@ def score_assessment(assessment: ModelAssessment) -> ContestAnalysis:
 
     verification = (
         f"LLM web research + deterministic scoring. "
-        f"Entrants estimated at {assessment.entrants_low:,}–"
-        f"{assessment.entrants_high:,}; confidence {assessment.confidence.lower()}."
+        f"Entrant count is an unverifiable model estimate "
+        f"({assessment.entrants_low:,}–{assessment.entrants_high:,}, "
+        f"confidence {assessment.confidence.lower()}); treat the odds as a "
+        f"rough bucket, not a measurement."
     )
 
     return ContestAnalysis(
@@ -109,6 +126,7 @@ def score_assessment(assessment: ModelAssessment) -> ContestAnalysis:
         chance_low_ppm=chance_low_ppm,
         chance_likely_ppm=chance_likely_ppm,
         chance_high_ppm=chance_high_ppm,
+        crowd=crowd_label(chance_likely_ppm),
         friction_minutes=assessment.friction_minutes,
         registration_required=assessment.registration_required,
         newsletter_required=assessment.newsletter_required,

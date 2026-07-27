@@ -206,6 +206,7 @@ class ContestAnalysis(StrictModel):
     chance_low_ppm: int
     chance_likely_ppm: int
     chance_high_ppm: int
+    crowd: str = "Unknown"
     friction_minutes: float
     registration_required: bool
     newsletter_required: bool
@@ -216,7 +217,7 @@ class ContestAnalysis(StrictModel):
     evidence_urls: list[str]
     verification: str
     score_breakdown: ScoreBreakdown
-    analysis_method: str = "llm-estimate+deterministic-score-v2"
+    analysis_method: str = "llm-estimate+deterministic-score-v5"
     analyzed_at: str
 
 
@@ -245,6 +246,7 @@ class DiscoveryResponse(StrictModel):
     novel_candidates: int
     analyzed_candidates: int
     rejected_candidates: int
+    truncated_candidates: int = 0
     search_errors: int
     round: int
     model: str

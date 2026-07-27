@@ -259,6 +259,18 @@ function chanceRange(contest: Contest) {
   )}`;
 }
 
+// Entrant counts are model estimates that are never checked against an
+// outcome, so headline odds are shown as a bucket. The exact ppm stays
+// available in the detail view, labelled as an estimate.
+function crowdLabel(contest: Contest) {
+  const ppm = contest.chanceLikelyPpm;
+  if (!ppm) return "Crowd unknown";
+  if (ppm >= 50_000) return "Few entrants";
+  if (ppm >= 10_000) return "Moderate crowd";
+  if (ppm >= 1_000) return "Crowded";
+  return "Very crowded";
+}
+
 function portfolioChance(
   contests: Contest[],
   field: "chanceLowPpm" | "chanceLikelyPpm" | "chanceHighPpm",
@@ -1265,9 +1277,9 @@ function ContestCard({
           <p>{contest.prize}</p>
         </div>
         <div className="chance-cell">
-          <small>Estimated chance</small>
-          <b>{chanceRange(contest)}</b>
-          <span>likely {formatChance(contest.chanceLikelyPpm)}</span>
+          <small>Field size</small>
+          <b>{crowdLabel(contest)}</b>
+          <span>est. {chanceRange(contest)}</span>
         </div>
         <div className="card-deadline">
           <small>Deadline</small>
@@ -1325,10 +1337,11 @@ function ContestDetail({
       <p className="detail-description">{contest.description}</p>
 
       <div className="probability-card">
-        <span>Estimated probability</span>
-        <strong>{chanceRange(contest)}</strong>
+        <span>Estimated probability (unverified)</span>
+        <strong>{crowdLabel(contest)}</strong>
         <small>
-          likely {formatChance(contest.chanceLikelyPpm)} · about{" "}
+          {chanceRange(contest)} · likely{" "}
+          {formatChance(contest.chanceLikelyPpm)} · about{" "}
           {contest.entrantsLow.toLocaleString("en-GB")}–
           {contest.entrantsHigh.toLocaleString("en-GB")} entrants
         </small>

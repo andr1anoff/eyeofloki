@@ -148,7 +148,9 @@ class GeminiContestAnalyst:
             ),
             config={
                 "system_instruction": SYSTEM_PROMPT,
-                "temperature": 0.2,
+                "thinking_config": {
+                    "thinking_level": self.settings.GEMINI_THINKING_LEVEL
+                },
                 "response_mime_type": "application/json",
                 "response_json_schema": AssessmentBundle.model_json_schema(),
             },

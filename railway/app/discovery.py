@@ -249,6 +249,7 @@ class ContestDiscovery:
             for title in request.known_titles
             if title_fingerprint(title)
         }
+        blocked_hosts = self.settings.blocked_hosts
         seen_urls: set[str] = set()
         candidates: list[dict[str, object]] = []
         max_rank = max(
@@ -272,9 +273,11 @@ class ContestDiscovery:
                     continue
                 normalized = normalize_url(url)
                 fingerprint = title_fingerprint(title)
+                host = (parsed.hostname or "").lower().removeprefix("www.")
                 if (
                     normalized in known_urls
                     or normalized in seen_urls
+                    or host in blocked_hosts
                     or _matches_known_title(fingerprint, known_titles)
                     or not _looks_like_contest(title, content)
                 ):
@@ -366,7 +369,9 @@ class ContestDiscovery:
             ),
             config={
                 "system_instruction": DISCOVERY_PROMPT,
-                "temperature": 0.1,
+                "thinking_config": {
+                    "thinking_level": self.settings.GEMINI_THINKING_LEVEL
+                },
                 "response_mime_type": "application/json",
                 "response_json_schema": (
                     DiscoveryAssessmentBundle.model_json_schema()
@@ -381,6 +386,7 @@ class ContestDiscovery:
             for candidate in candidates
         }
         discoveries: list[DiscoveryItem] = []
+        rejected = 0
 
         for assessment in bundle.assessments:
             candidate = candidate_by_id.get(assessment.candidate_id)
@@ -422,15 +428,15 @@ class ContestDiscovery:
             if (
                 not assessment_is_eligible
                 or scored.score < self.settings.DISCOVERY_MIN_SCORE
-                or len(discoveries) >= request.limit
             ):
+                rejected += 1
                 continue
             source_url = str(candidate["url"])
             if source_url not in scored.evidence_urls:
                 scored.evidence_urls.insert(0, source_url)
                 scored.evidence_urls = scored.evidence_urls[:6]
             scored.analysis_method = (
-                "tavily-discovery+gemini-verification+deterministic-score-v4"
+                "tavily-discovery+gemini-verification+deterministic-score-v5"
             )
             discoveries.append(
                 DiscoveryItem(
@@ -446,13 +452,21 @@ class ContestDiscovery:
                 )
             )
 
+        # Rank the survivors by score before truncating, so the limit keeps
+        # the best finds rather than whichever the model happened to emit
+        # first. Truncation is not rejection and is counted separately.
+        discoveries.sort(key=lambda item: item.analysis.score, reverse=True)
+        truncated = max(0, len(discoveries) - request.limit)
+        discoveries = discoveries[: request.limit]
+
         return DiscoveryResponse(
             discoveries=discoveries,
             searched_queries=len(queries),
             raw_candidates=raw_candidates,
             novel_candidates=len(candidates),
             analyzed_candidates=len(bundle.assessments),
-            rejected_candidates=max(0, len(candidates) - len(discoveries)),
+            rejected_candidates=rejected,
+            truncated_candidates=truncated,
             search_errors=search_errors,
             round=request.round,
             model=self.settings.GEMINI_MODEL,
