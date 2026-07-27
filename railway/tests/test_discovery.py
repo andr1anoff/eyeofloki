@@ -275,7 +275,11 @@ def test_single_contest_page_is_not_flagged() -> None:
     assert signals == []
 
 
-def test_hub_candidates_never_reach_the_model() -> None:
+def test_hub_score_is_passed_to_the_model_as_evidence() -> None:
+    """Structure alone cannot separate a contest portal hosting one real
+    giveaway from a pure directory, so the model gets the signal and the
+    final say."""
+
     async def hub_page_fetcher(contest, _settings):
         return PageEvidence(
             contest_id=contest.id,
@@ -288,6 +292,7 @@ def test_hub_candidates_never_reach_the_model() -> None:
             registration_signals=[],
             hub_signals=["12 links to other contests"],
             hub_score=90,
+            contest_links=[],
         )
 
     search = FakeDiscoverySearch()
@@ -300,12 +305,12 @@ def test_hub_candidates_never_reach_the_model() -> None:
         search_client=search,
         page_fetcher=hub_page_fetcher,
     )
-    result = asyncio.run(engine.discover(DiscoveryRequest(round=0)))
+    asyncio.run(engine.discover(DiscoveryRequest(round=0)))
 
-    assert models.calls == []
-    assert result.analyzed_candidates == 0
-    assert len(result.rejections) == 2
-    assert all("aggregator" in n.reason for n in result.rejections)
+    assert models.calls, "hub pages must still be assessed"
+    sent = str(models.calls[0])
+    assert "hub_score" in sent
+    assert "12 links to other contests" in sent
 
 
 def test_long_odds_are_dropped_by_the_floor() -> None:
@@ -392,10 +397,10 @@ def test_listing_links_are_followed_instead_of_binned() -> None:
     )
     result = asyncio.run(engine.discover(DiscoveryRequest(round=0)))
 
-    # The listing itself is rejected, but its two links became candidates.
-    assert any("aggregator" in n.reason for n in result.rejections)
+    # The listing supplies two candidates the search never surfaced.
+    # one from search, two followed off the listing
+    assert result.novel_candidates == 3
     assert models.calls, "harvested candidates must reach the model"
     sent = str(models.calls[0])
     assert "gewinnspiel/kopfhoerer" in sent
     assert "gewinnspiel/tablet" in sent
-    assert "portal.example/listing" not in sent

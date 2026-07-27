@@ -438,19 +438,12 @@ class ContestDiscovery:
             candidate_id = int(candidate["candidate_id"])
             page = page_by_id[candidate_id]
             # Drop listing pages here, before they cost a Gemini call.
+            # A high hub score is evidence, not a verdict: a contest portal
+            # hosting one real giveaway looks structurally identical to a
+            # directory. Harvest the links either way and let the model
+            # decide whether the page itself is enterable.
             if page.hub_score > self.settings.DISCOVERY_MAX_HUB_SCORE:
-                rejections.append(
-                    _note(
-                        candidate,
-                        "aggregator page ("
-                        + (", ".join(page.hub_signals) or "listing layout")
-                        + ")",
-                    )
-                )
-                # A listing is a directory of the very pages we want. Keep
-                # its outbound links and follow them instead of binning it.
                 harvested.extend(page.contest_links)
-                continue
             compact_candidates.append(
                 {
                     **candidate,
@@ -468,6 +461,9 @@ class ContestDiscovery:
                 }
             )
 
+        compact_candidates.sort(
+            key=lambda item: item["page"]["hub_score"]  # type: ignore[index]
+        )
         room = self.settings.MAX_DISCOVERY_CANDIDATES - len(compact_candidates)
         if harvested and room > 0:
             follow: list[str] = []

@@ -31,7 +31,24 @@ REGISTRATION_SIGNALS = {
 
 # A page that lists many contests is an aggregator, not an entry point.
 # These are the single biggest source of wasted Gemini calls.
-def _hub_signals(html: str, soup) -> tuple[list[str], int, list[str]]:
+SOCIAL_HOSTS = {
+    "instagram.com",
+    "facebook.com",
+    "tiktok.com",
+    "x.com",
+    "twitter.com",
+    "threads.net",
+    "youtube.com",
+}
+
+
+def _hub_signals(
+    html: str, soup, host: str = ""
+) -> tuple[list[str], int, list[str]]:
+    # A social post is one contest; the surrounding feed markup is not a
+    # directory, so the structural signals mean nothing here.
+    if host.removeprefix("www.") in SOCIAL_HOSTS:
+        return [], 0, []
     lowered = html.lower()
     signals: list[str] = []
     mentions = lowered.count("gewinnspiel") + lowered.count("verlosung")
@@ -99,7 +116,7 @@ async def _assert_public_host(url: str) -> None:
 def _page_text(html: str) -> tuple[str, str, list[str], int]:
     soup = BeautifulSoup(html, "html.parser")
     title = soup.title.get_text(" ", strip=True) if soup.title else ""
-    hub_signals, hub_score, outbound = _hub_signals(html, soup)
+    hub_signals, hub_score, outbound = _hub_signals(html, soup, host)
     for node in soup(["script", "style", "noscript", "svg"]):
         node.decompose()
     text = " ".join(soup.get_text(" ", strip=True).split())
@@ -147,7 +164,7 @@ async def fetch_contest_page(
                 hub_signals,
                 hub_score,
                 outbound,
-            ) = _page_text(html)
+            ) = _page_text(html, urlparse(str(response.url)).hostname or "")
             return PageEvidence(
                 contest_id=contest.id,
                 final_url=current_url,
