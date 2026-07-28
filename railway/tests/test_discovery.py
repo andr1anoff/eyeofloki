@@ -102,7 +102,9 @@ async def fake_page_fetcher(
         status_code=200,
         reachable=True,
         title=contest.title,
-        excerpt="Free entry form. Ten cinema ticket pairs. Deadline 2099-08-01.",
+        excerpt=(
+            "Gewinnspiel: free entry form, ten cinema ticket pairs to win, deadline 2099-08-01. Teilnahme ist kostenlos und ohne Kauf moeglich. Der Rechtsweg ist ausgeschlossen. Teilnahmeberechtigt sind volljaehrige Personen mit Wohnsitz in Deutschland. Die Gewinner werden per E-Mail benachrichtigt."
+        ),
         entry_signals=["form", "participation copy"],
         registration_signals=[],
     )
@@ -291,7 +293,7 @@ def test_hub_score_is_passed_to_the_model_as_evidence() -> None:
             status_code=200,
             reachable=True,
             title=contest.title,
-            excerpt="Alle Gewinnspiele auf einen Blick.",
+            excerpt=("Alle Gewinnspiele auf einen Blick. " * 12),
             entry_signals=[],
             registration_signals=[],
             hub_signals=["12 links to other contests"],
@@ -362,7 +364,8 @@ def test_listing_links_are_followed_instead_of_binned() -> None:
             return PageEvidence(
                 contest_id=contest.id, final_url=url, status_code=200,
                 reachable=True, title="Alle Gewinnspiele",
-                excerpt="Uebersicht", entry_signals=[],
+                excerpt=("Gewinnspiel Uebersicht aller Verlosungen. " * 12),
+                entry_signals=[],
                 registration_signals=[],
                 hub_signals=["20 links to other contests"], hub_score=90,
                 contest_links=[
@@ -373,7 +376,8 @@ def test_listing_links_are_followed_instead_of_binned() -> None:
         return PageEvidence(
             contest_id=contest.id, final_url=url, status_code=200,
             reachable=True, title="Wir verlosen Kopfhoerer",
-            excerpt="Teilnahmeschluss 30.09.2026", entry_signals=["form"],
+            excerpt=("Gewinnspiel Teilnahmeschluss 30.09.2026. " * 12),
+            entry_signals=["form"],
             registration_signals=[], hub_signals=[], hub_score=0,
             contest_links=[],
         )

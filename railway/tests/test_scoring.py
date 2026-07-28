@@ -104,3 +104,25 @@ def test_prize_outweighs_chance_in_the_new_weighting():
                    entrants_high=900)
     )
     assert great_prize_long_odds.score > poor_prize_short_odds.score
+
+
+def test_reach_scales_expected_value_for_events():
+    """A Volksfest 600km away outranked real prizes on expected value
+    because locality only nudged the score by a tenth."""
+    kwargs = dict(prize_delivery="location_bound", prize_value_eur=30,
+                  friction_minutes=1, corrected_winners=50,
+                  entrants_low=200, entrants_likely=400, entrants_high=800)
+    nearby = score_assessment(assessment(locality_fit=90, **kwargs))
+    far_away = score_assessment(assessment(locality_fit=5, **kwargs))
+
+    assert far_away.ev_cents_per_minute * 10 < nearby.ev_cents_per_minute
+    assert far_away.score < nearby.score
+
+
+def test_shipped_prize_ignores_a_low_locality_fit():
+    shipped = score_assessment(
+        assessment(prize_delivery="shipped", locality_fit=0,
+                   prize_value_eur=100)
+    )
+    assert shipped.score_breakdown.locality == 100
+    assert shipped.ev_cents_per_minute > 0

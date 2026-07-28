@@ -199,9 +199,17 @@ def score_assessment(assessment: ModelAssessment) -> ContestAnalysis:
     effective_chance_ppm = combine_ppm(chance_likely_ppm, attempts)
     # Repetition does not change the rate, only the volume you can buy at
     # that rate, so EV per minute stays a single-entry figure.
+    # A prize you cannot collect is worth nothing per minute, however cheap
+    # the entry is. Locality scales the value rather than nudging the score.
+    reach = locality_score(
+        assessment.prize_delivery,
+        assessment.ships_to_germany,
+        assessment.locality_fit,
+    ) / 100
     ev_cents_per_minute = round(
         (chance_likely_ppm / 1_000_000)
         * assessment.prize_value_eur
+        * reach
         * 100
         / max(0.5, assessment.friction_minutes)
     )

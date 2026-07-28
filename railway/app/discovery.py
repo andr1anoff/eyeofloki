@@ -65,7 +65,8 @@ geography matters:
 - prize_delivery="location_bound" for anything the winner must show up for:
   tickets, guest lists, stays, meals, experiences. Only worth it near the
   user's reachable_for_events area; score locality_fit against that and be
-  harsh about distance.
+  harsh about distance. A festival or venue several hours away scores under
+  15 however good the prize is, because the winner will not travel for it.
 
 Always set prize_value_eur to your best estimate of the retail value in euros
 of what one winner receives. Never return 0 for a real prize: if the page does
@@ -251,6 +252,28 @@ def _matches_known_title(candidate: str, known: set[str]) -> bool:
         or (len(item) >= 14 and item in candidate)
         for item in known
     )
+
+
+LOGIN_WALL_MARKERS = (
+    "log in to continue",
+    "melde dich an",
+    "anmelden, um fortzufahren",
+    "see posts, photos and more",
+    "sorry, this page isn",
+    "content isn't available",
+    "javascript is not available",
+)
+
+CONTEST_WORDS = ("gewinnspiel", "verlosung", "giveaway", "gewinne", "win ")
+
+
+def _is_unreadable(page: PageEvidence) -> bool:
+    excerpt = page.excerpt.lower()
+    if len(excerpt) >= 400 and any(w in excerpt for w in CONTEST_WORDS):
+        return False
+    if any(marker in excerpt for marker in LOGIN_WALL_MARKERS):
+        return True
+    return len(excerpt) < 200
 
 
 def _note(candidate: dict[str, object], reason: str) -> "RejectionNote":
@@ -457,6 +480,16 @@ class ContestDiscovery:
             # decide whether the page itself is enterable.
             if page.hub_score > self.settings.DISCOVERY_MAX_HUB_SCORE:
                 harvested.extend(page.contest_links)
+
+            # Social posts are worth chasing -- two of the best finds came
+            # from TikTok and Instagram -- but anonymous fetches often return
+            # a login wall. Assessing that wall costs a call and can only
+            # ever produce a false "inactive".
+            if _is_unreadable(page):
+                rejections.append(
+                    _note(candidate, "page not readable without a login")
+                )
+                continue
             compact_candidates.append(
                 {
                     **candidate,
