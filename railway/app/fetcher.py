@@ -113,7 +113,9 @@ async def _assert_public_host(url: str) -> None:
             raise ValueError("Private or reserved network targets are blocked")
 
 
-def _page_text(html: str) -> tuple[str, str, list[str], int]:
+def _page_text(
+    html: str, host: str = ""
+) -> tuple[str, str, list[str], int, list[str]]:
     soup = BeautifulSoup(html, "html.parser")
     title = soup.title.get_text(" ", strip=True) if soup.title else ""
     hub_signals, hub_score, outbound = _hub_signals(html, soup, host)

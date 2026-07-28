@@ -485,6 +485,11 @@ class ContestDiscovery:
             # from TikTok and Instagram -- but anonymous fetches often return
             # a login wall. Assessing that wall costs a call and can only
             # ever produce a false "inactive".
+            if not page.reachable:
+                rejections.append(
+                    _note(candidate, f"page unreachable ({page.excerpt[:60]})")
+                )
+                continue
             if _is_unreadable(page):
                 rejections.append(
                     _note(candidate, "page not readable without a login")
