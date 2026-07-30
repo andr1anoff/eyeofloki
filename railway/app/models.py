@@ -54,6 +54,7 @@ class UserProfile(StrictModel):
     )
     ships_to: str = "Germany"
     reachable_for_events: str = "Berlin and Brandenburg"
+    website_forms_only: bool = True
     avoid_prizes: list[str] = Field(
         default_factory=lambda: [
             "gardening and garden furniture",
@@ -72,7 +73,7 @@ class UserProfile(StrictModel):
             "mandatory account",
             "mandatory newsletter",
             "purchase requirement",
-            "social sharing",
+            "social-media interaction",
         ],
         max_length=20,
     )
@@ -154,6 +155,18 @@ class ModelAssessment(StrictModel):
     entry_mechanism_found: bool
     registration_required: bool
     newsletter_required: bool
+    eligibility: str = Field(
+        default="Needs review",
+        min_length=2,
+        max_length=220,
+        description="Concise eligibility conditions in English",
+    )
+    entry_method: str = Field(
+        default="Needs review",
+        min_length=2,
+        max_length=220,
+        description="Concise website-form entry instructions in English",
+    )
     corrected_deadline: str = Field(
         description="Exact calendar date in YYYY-MM-DD format"
     )
@@ -289,6 +302,8 @@ class ContestAnalysis(StrictModel):
     friction_minutes: float
     registration_required: bool
     newsletter_required: bool
+    eligibility: str = "Needs review"
+    entry_method: str = "Needs review"
     deadline: str
     winners: int
     summary: str

@@ -218,7 +218,7 @@ def score_assessment(assessment: ModelAssessment) -> ContestAnalysis:
     score = 0 if blocked else max(0, min(100, weighted))
     status = "BLOCKED" if blocked else "READY" if score >= 60 else "NEW"
     if blocked:
-        verdict = assessment.blocking_reason or "No working entry path found"
+        verdict = assessment.blocking_reason or "No working website form found"
     elif score >= 80:
         verdict = "Strong entry"
     elif score >= 60:
@@ -259,6 +259,8 @@ def score_assessment(assessment: ModelAssessment) -> ContestAnalysis:
         friction_minutes=assessment.friction_minutes,
         registration_required=assessment.registration_required,
         newsletter_required=assessment.newsletter_required,
+        eligibility=assessment.eligibility,
+        entry_method=assessment.entry_method,
         deadline=assessment.corrected_deadline,
         winners=winners,
         summary=assessment.summary,

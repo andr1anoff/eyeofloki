@@ -21,23 +21,27 @@ class Settings(BaseSettings):
     MAX_CONTESTS_PER_RECON: int = 10
     SEARCH_RESULTS_PER_CONTEST: int = 4
 
-    # One validator pass. Adaptive discovery may run several deliberately
-    # different passes, but each pass stays bounded for latency and API cost.
+    # Search more pages per lane, but keep the model-facing candidate batch
+    # bounded. Coverage grows without making every Gemini request enormous.
     DISCOVERY_QUERIES_PER_RUN: int = 8
-    DISCOVERY_RESULTS_PER_QUERY: int = 8
+    DISCOVERY_RESULTS_PER_QUERY: int = 10
     MAX_DISCOVERY_CANDIDATES: int = 24
-    DISCOVERY_MIN_SCORE: int = 40
-    DISCOVERY_MIN_CHANCE_PPM: int = 100
+    DISCOVERY_MIN_SCORE: int = 35
+    DISCOVERY_MIN_CHANCE_PPM: int = 50
     DISCOVERY_MAX_HUB_SCORE: int = 45
     DISCOVERY_TIME_RANGE: str = "month"
-    DISCOVERY_MAX_HARVESTED: int = 10
-    DISCOVERY_BLOCKED_HOSTS: str = ""
+    DISCOVERY_MAX_HARVESTED: int = 12
+    DISCOVERY_BLOCKED_HOSTS: str = (
+        "instagram.com,m.instagram.com,facebook.com,m.facebook.com,"
+        "tiktok.com,vm.tiktok.com,x.com,twitter.com,threads.net,"
+        "youtube.com,youtu.be,pinterest.com,reddit.com"
+    )
 
-    # Search-controller settings. The first pass is precise; later passes widen
-    # recency and ranking thresholds only when the queue is still under-filled.
-    ADAPTIVE_TARGET_RESULTS: int = 8
+    # Eight distinct lanes per pass and a twelve-result target. Later passes run
+    # only when earlier ones do not fill the queue.
+    ADAPTIVE_TARGET_RESULTS: int = 12
     ADAPTIVE_MAX_PASSES: int = 3
-    ADAPTIVE_QUERIES_PER_PASS: int = 6
+    ADAPTIVE_QUERIES_PER_PASS: int = 8
 
     @property
     def blocked_hosts(self) -> set[str]:

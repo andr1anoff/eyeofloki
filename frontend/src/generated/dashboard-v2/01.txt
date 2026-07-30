@@ -44,6 +44,8 @@ type ReconAnalysis = {
   friction_minutes: number;
   registration_required: boolean;
   newsletter_required: boolean;
+  eligibility?: string;
+  entry_method?: string;
   deadline: string;
   winners: number;
   summary: string;
@@ -108,6 +110,7 @@ const PROFILE = {
   adult: true,
   ships_to: "Germany",
   reachable_for_events: "Berlin and Brandenburg",
+  website_forms_only: true,
   preferred_prizes: [
     "cinema tickets",
     "concerts",
@@ -128,7 +131,6 @@ const PROFILE = {
     "mandatory account",
     "mandatory newsletter",
     "purchase requirement",
-    "social sharing",
   ],
   max_entry_minutes: 5,
 };

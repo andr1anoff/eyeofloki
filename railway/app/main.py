@@ -5,7 +5,6 @@ from datetime import datetime, timezone
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from .adaptive_discovery import AdaptiveContestDiscovery
 from .fetcher import fetch_contest_page
 from .hunt import ContestHunter
 from .models import (
@@ -18,10 +17,13 @@ from .models import (
     ReconRequest,
     ReconResponse,
 )
+from .policy import configure_prompts
 from .research import GeminiContestAnalyst
 from .scoring import portfolio_ppm, score_assessment, select_for_budget
 from .settings import Settings, get_settings
+from .webform_discovery import WebsiteFormDiscovery
 
+configure_prompts()
 
 app = FastAPI(
     title="Eye of Loki Intelligence Service",
@@ -88,7 +90,7 @@ async def discover(
     if not runtime.TAVILY_API_KEY:
         raise HTTPException(status_code=503, detail="TAVILY_API_KEY is missing")
 
-    engine = AdaptiveContestDiscovery(runtime)
+    engine = WebsiteFormDiscovery(runtime)
     try:
         return await engine.discover(request)
     except Exception as exc:
@@ -112,7 +114,7 @@ async def hunt(
     if not runtime.TAVILY_API_KEY:
         raise HTTPException(status_code=503, detail="TAVILY_API_KEY is missing")
 
-    adaptive = AdaptiveContestDiscovery(runtime)
+    adaptive = WebsiteFormDiscovery(runtime)
     hunter = ContestHunter(runtime, discovery=adaptive)
     try:
         result, plan = await hunter.hunt(request)

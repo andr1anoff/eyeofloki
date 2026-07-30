@@ -30,7 +30,6 @@ REGISTRATION_SIGNALS = {
 
 
 # A page that lists many contests is an aggregator, not an entry point.
-# These are the single biggest source of wasted Gemini calls.
 SOCIAL_HOSTS = {
     "instagram.com",
     "facebook.com",
@@ -42,11 +41,77 @@ SOCIAL_HOSTS = {
 }
 
 
+EVIDENCE_TERMS = (
+    "teilnahmeformular",
+    "gewinnspielformular",
+    "online-formular",
+    "einsendeschluss",
+    "teilnahmeschluss",
+    "teilnahmeberechtigt",
+    "wohn­sitz",
+    "wohnsitz",
+    "gewinnspiel",
+    "verlosung",
+    "gewinner",
+    "preis",
+    "formular",
+    "deadline",
+    "eligible",
+    "eligibility",
+    "entry form",
+    "winner",
+    "prize",
+    "no purchase",
+)
+
+
+def _evidence_excerpt(text: str, limit: int = 3_600) -> str:
+    """Keep high-value rules/form passages instead of the first 16k characters.
+
+    Most contest pages spend thousands of characters on navigation and marketing.
+    Small windows around deadlines, eligibility and form terms carry more evidence
+    per token and leave room to inspect more candidates in one model request.
+    """
+
+    compact = " ".join(text.split())
+    if len(compact) <= limit:
+        return compact
+
+    lowered = compact.casefold()
+    spans: list[tuple[int, int]] = [(0, min(250, len(compact)))]
+    for term in EVIDENCE_TERMS:
+        start = lowered.find(term.casefold())
+        if start < 0:
+            continue
+        spans.append((max(0, start - 120), min(len(compact), start + 620)))
+
+    spans.sort()
+    merged: list[list[int]] = []
+    for start, end in spans:
+        if merged and start <= merged[-1][1] + 80:
+            merged[-1][1] = max(merged[-1][1], end)
+        else:
+            merged.append([start, end])
+
+    chunks: list[str] = []
+    used = 0
+    for start, end in merged:
+        chunk = compact[start:end].strip()
+        if not chunk:
+            continue
+        remaining = limit - used - (3 if chunks else 0)
+        if remaining <= 0:
+            break
+        chunks.append(chunk[:remaining])
+        used += min(len(chunk), remaining) + (3 if len(chunks) > 1 else 0)
+    return " … ".join(chunks)[:limit]
+
+
 def _hub_signals(
     html: str, soup, host: str = ""
 ) -> tuple[list[str], int, list[str]]:
-    # A social post is one contest; the surrounding feed markup is not a
-    # directory, so the structural signals mean nothing here.
+    # Social pages are filtered before fetching by default. Keep this exception
+    # for backwards-compatible parser tests and manually supplied pages.
     if host.removeprefix("www.") in SOCIAL_HOSTS:
         return [], 0, []
     lowered = html.lower()
@@ -121,8 +186,14 @@ def _page_text(
     hub_signals, hub_score, outbound = _hub_signals(html, soup, host)
     for node in soup(["script", "style", "noscript", "svg"]):
         node.decompose()
-    text = " ".join(soup.get_text(" ", strip=True).split())
-    return title[:240], text[:16_000], hub_signals, hub_score, outbound
+    text = soup.get_text(" ", strip=True)
+    return (
+        title[:240],
+        _evidence_excerpt(text),
+        hub_signals,
+        hub_score,
+        outbound,
+    )
 
 
 async def fetch_contest_page(

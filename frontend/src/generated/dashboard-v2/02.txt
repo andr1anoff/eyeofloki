@@ -40,6 +40,14 @@ function normalizeContestUrl(value: string) {
 }
 
 function mapAnalysis(contest: Contest, analysis: ReconAnalysis): Contest {
+  const translatedEligibility =
+    analysis.eligibility && analysis.eligibility !== "Needs review"
+      ? analysis.eligibility
+      : contest.eligibility;
+  const translatedEntryMethod =
+    analysis.entry_method && analysis.entry_method !== "Needs review"
+      ? analysis.entry_method
+      : contest.entryMethod;
   const mapped = {
     ...contest,
     score: analysis.score,
@@ -57,6 +65,8 @@ function mapAnalysis(contest: Contest, analysis: ReconAnalysis): Contest {
     friction: `≈ ${Math.max(1, Math.round(analysis.friction_minutes))} min`,
     registrationRequired: analysis.registration_required,
     newsletterRequired: analysis.newsletter_required,
+    eligibility: translatedEligibility,
+    entryMethod: translatedEntryMethod,
     deadline: normalizeIsoDate(analysis.deadline) ?? contest.deadline,
     winners: analysis.winners,
     description: analysis.summary,
@@ -124,6 +134,11 @@ function berlinTimestamp() {
     .format(new Date())
     .replace(",", " ·")
     .toUpperCase();
+}
+
+function needsEnglishTranslation(contest: Contest) {
+  const text = `${contest.eligibility} ${contest.entryMethod} ${contest.description} ${contest.reasons}`;
+  return /[äöüß]|teilnahme|teilnahmeberechtigt|wohnsitz|natürliche|personen|formular|frage beantworten|einsendeschluss|gewinnspiel/i.test(text);
 }
 
 export function DashboardV2({ displayName }: { displayName: string }) {
@@ -198,4 +213,3 @@ export function DashboardV2({ displayName }: { displayName: string }) {
           : contests.filter((contest) => contest.status === filter);
     return [...selected].sort((a, b) => b.score - a.score);
   }, [contests, filter]);
-

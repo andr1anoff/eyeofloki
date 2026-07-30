@@ -60,7 +60,7 @@
         setToast(
           healthy
             ? payload.capabilities?.includes("adaptive-discovery")
-              ? "Adaptive discovery is online."
+              ? "Website-form discovery is online."
               : "Backend is online, but still running the old discovery engine."
             : "Backend answered, but one or more capabilities or secrets are missing.",
         );
@@ -84,7 +84,10 @@
 
   async function verifyPendingLeads(current: Contest[]) {
     const pending = current
-      .filter((contest) => contest.analysisMethod === "unscored")
+      .filter(
+        (contest) =>
+          contest.analysisMethod === "unscored" || needsEnglishTranslation(contest),
+      )
       .slice(0, 8);
     if (!pending.length) return current;
     try {
@@ -130,7 +133,7 @@
     setScanProgress(6);
     announce({
       kind: "working",
-      message: "Planning several search waves, then verifying each direct entry page.",
+      message: "Searching direct website forms across Berlin, Germany and the EU.",
     });
     const timer = window.setInterval(
       () => setScanProgress((value) => Math.min(88, value + 3)),
@@ -147,7 +150,7 @@
           known_urls: contests.map((contest) => contest.url),
           known_titles: contests.map((contest) => contest.title),
           round: discoveryRound,
-          limit: 16,
+          limit: 20,
           profile: PROFILE,
         }),
       });
@@ -176,8 +179,8 @@
       setScanProgress(100);
 
       const message = novel.length
-        ? `${novel.length} new contests added after ${payload.searched_queries ?? 0} search lanes and ${payload.analyzed_candidates ?? 0} model checks.`
-        : `No new contest survived this run. ${payload.searched_queries ?? 0} lanes, ${payload.raw_candidates ?? 0} search results and ${payload.analyzed_candidates ?? 0} candidates were checked.`;
+        ? `${novel.length} new website-form contests added after ${payload.searched_queries ?? 0} search lanes and ${payload.analyzed_candidates ?? 0} model checks.`
+        : `No new form-based contest survived this run. ${payload.searched_queries ?? 0} lanes, ${payload.raw_candidates ?? 0} search results and ${payload.analyzed_candidates ?? 0} candidates were checked.`;
       announce({ kind: "success", message });
       setToast(message);
     } catch (error) {
