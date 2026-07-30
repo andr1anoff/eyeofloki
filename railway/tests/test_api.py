@@ -11,12 +11,18 @@ def test_health_exposes_configuration_state_without_secrets() -> None:
     assert response.json() == {
         "ok": True,
         "service": "eye-of-loki-intelligence",
-        "version": "5.0.0",
+        "version": "6.0.0",
         "model": "gemini-3.5-flash-lite",
         "gemini_configured": False,
         "search_configured": False,
         "auth_configured": False,
-        "capabilities": ["discovery", "verification", "hunt", "portfolio"],
+        "capabilities": [
+            "discovery",
+            "adaptive-discovery",
+            "verification",
+            "hunt",
+            "portfolio",
+        ],
     }
 
 
