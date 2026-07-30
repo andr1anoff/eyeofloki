@@ -1,0 +1,100 @@
+      <button className="contest-main" onClick={onOpen} aria-label={`Open details for ${contest.title}`}>
+        <div className="score-block"><strong>{contest.status === "BLOCKED" ? "—" : contest.score}</strong><span>score</span></div>
+        <div className="contest-copy">
+          <div className="contest-meta"><span className={`status-pill status-${contest.status.toLowerCase()}`}>{contest.status}</span><span>{contest.locality}</span><span>{contest.confidence} confidence</span></div>
+          <h2>{contest.title}</h2>
+          <p>{contest.prize}</p>
+        </div>
+        <div className="card-metric"><span>Estimated field</span><b>{crowdLabel(contest)}</b><small>{chanceRange(contest)}</small></div>
+        <div className="card-metric deadline"><span>Deadline</span><b>{formatDeadline(contest.deadline)}</b><small>{deadlineLabel(contest.deadline)}</small></div>
+        <Icon name="arrow" size={20} />
+      </button>
+      <div className="contest-actions">
+        <span>{contest.friction}</span><span>{contest.winners} winner{contest.winners === 1 ? "" : "s"}</span><span>{contest.competition} competition</span>
+        <div />
+        {!["ENTERED", "BLOCKED", "SKIPPED"].includes(contest.status) && (
+          <>
+            <button onClick={() => onStatus(contest.id, "SKIPPED")}><Icon name="skip" size={14} />Skip</button>
+            <button className="entered-action" onClick={() => onStatus(contest.id, "ENTERED")}><Icon name="check" size={14} />Entered</button>
+          </>
+        )}
+      </div>
+    </article>
+  );
+}
+
+function DetailDialog({ contest, onClose, onStatus }: { contest: Contest; onClose: () => void; onStatus: (id: number, status: ContestStatus) => void }) {
+  const reasons = parseReasons(contest.reasons);
+  const evidence = parseEvidence(contest.evidenceUrls);
+  const breakdown = parseBreakdown(contest.scoreBreakdown);
+  return (
+    <div className="dialog-backdrop" role="presentation" onMouseDown={onClose}>
+      <section className="detail-dialog" role="dialog" aria-modal="true" aria-labelledby="contest-detail-title" onMouseDown={(event) => event.stopPropagation()}>
+        <header className="detail-top">
+          <div><span className={`status-pill status-${contest.status.toLowerCase()}`}>{contest.status}</span><span>{contest.organizer}</span></div>
+          <button className="dialog-close" onClick={onClose} aria-label="Close contest details" autoFocus><Icon name="close" size={21} /></button>
+        </header>
+
+        <div className="detail-scroll">
+          <section className="detail-hero">
+            <div><h2 id="contest-detail-title">{contest.title}</h2><p>{contest.description}</p></div>
+            <div className="probability-card">
+              <span>Estimated probability</span><strong>{crowdLabel(contest)}</strong>
+              <p>{chanceRange(contest)} · likely {formatChance(contest.chanceLikelyPpm)} · roughly {contest.entrantsLow.toLocaleString("en-GB")}–{contest.entrantsHigh.toLocaleString("en-GB")} entrants</p>
+              <div><span>Confidence</span><b>{contest.confidence}</b><i><em style={{ width: contest.confidence === "High" ? "100%" : contest.confidence === "Medium" ? "66%" : "33%" }} /></i></div>
+            </div>
+          </section>
+
+          <section className="intel-grid">
+            <article><span>Score</span><b>{contest.score}/100</b></article>
+            <article><span>Deadline</span><b>{formatDeadline(contest.deadline)}</b><small>{deadlineLabel(contest.deadline)}</small></article>
+            <article><span>Eligibility</span><b>{contest.eligibility}</b></article>
+            <article><span>Entry route</span><b>{contest.entryMethod}</b></article>
+          </section>
+
+          <div className="detail-columns">
+            <section className="detail-section breakdown-section">
+              <div className="section-title"><b>Loki Score</b><span>Deterministic formula</span></div>
+              {Object.entries(breakdown).map(([label, value]) => (
+                <div className="breakdown-row" key={label}><span>{label}</span><i><em style={{ width: `${Math.max(0, Math.min(100, value))}%` }} /></i><b>{value}</b></div>
+              ))}
+            </section>
+
+            <section className="detail-section evidence-section">
+              <div className="section-title"><b>Evidence summary</b><span>{contest.analysisMethod}</span></div>
+              <ul>{reasons.map((reason) => <li key={reason}><Icon name={contest.status === "BLOCKED" ? "close" : "check"} size={15} />{reason}</li>)}</ul>
+            </section>
+          </div>
+
+          <section className="research-note"><span className="status-dot is-connected" /><div><b>Research note</b><p>{contest.verification}</p></div></section>
+
+          {evidence.length > 0 && <div className="source-links">{evidence.slice(0, 5).map((url, index) => <a href={url} target="_blank" rel="noreferrer" key={url}>Source {index + 1}<Icon name="external" size={14} /></a>)}</div>}
+        </div>
+
+        <footer className="detail-footer">
+          <a href={contest.url} target="_blank" rel="noreferrer">Open contest<Icon name="external" size={17} /></a>
+          {!["ENTERED", "BLOCKED"].includes(contest.status) && <button onClick={() => onStatus(contest.id, "ENTERED")}><Icon name="check" size={17} />Mark entered</button>}
+        </footer>
+      </section>
+    </div>
+  );
+}
+
+function ConnectionDialog({ railway, setRailway, connection, testing, onClose, onTest, onSave, onExport, onImport }: {
+  railway: RailwayConfig;
+  setRailway: Dispatch<SetStateAction<RailwayConfig>>;
+  connection: ConnectionState;
+  testing: boolean;
+  onClose: () => void;
+  onTest: () => void;
+  onSave: () => void;
+  onExport: () => void;
+  onImport: (file: File) => void;
+}) {
+  return (
+    <div className="dialog-backdrop" role="presentation" onMouseDown={onClose}>
+      <section className="connection-dialog" role="dialog" aria-modal="true" aria-labelledby="connection-title" onMouseDown={(event) => event.stopPropagation()}>
+        <header><span className="modal-icon"><Icon name="server" /></span><div><h2 id="connection-title">Railway intelligence service</h2><p>Private backend for search and Gemini verification.</p></div><button className="dialog-close" onClick={onClose} aria-label="Close settings"><Icon name="close" /></button></header>
+        <label><span>Service URL</span><input type="url" value={railway.url} placeholder="https://your-service.up.railway.app" onChange={(event) => setRailway((current) => ({ ...current, url: event.target.value }))} /></label>
+        <label><span>Shared secret</span><input type="password" value={railway.secret} autoComplete="off" placeholder="Generated with openssl rand -hex 32" onChange={(event) => setRailway((current) => ({ ...current, secret: event.target.value }))} /></label>
+        <div className="privacy-note"><Icon name="check" size={16} /><span>The URL and secret remain in this browser and are sent only to your Railway service.</span></div>
