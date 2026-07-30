@@ -1,0 +1,185 @@
+  const selected = contests.find((contest) => contest.id === selectedId) ?? null;
+  const readyCount = contests.filter((contest) => contest.status === "READY").length;
+  const newCount = contests.filter((contest) => contest.status === "NEW").length;
+  const entered = contests.filter((contest) => contest.status === "ENTERED");
+  const likelyPortfolio = portfolioChance(entered, "chanceLikelyPpm");
+  const lowPortfolio = portfolioChance(entered, "chanceLowPpm");
+  const highPortfolio = portfolioChance(entered, "chanceHighPpm");
+
+  function announce(next: Notice) {
+    setNotice(next);
+  }
+
+  function updateStatus(id: number, status: ContestStatus) {
+    setContests((current) =>
+      current.map((contest) =>
+        contest.id === id
+          ? {
+              ...contest,
+              status,
+              enteredAt: status === "ENTERED" ? new Date().toISOString() : contest.enteredAt,
+              verdict:
+                status === "ENTERED"
+                  ? "Entered"
+                  : status === "SKIPPED"
+                    ? "Skipped"
+                    : contest.verdict,
+            }
+          : contest,
+      ),
+    );
+    setToast(status === "ENTERED" ? "Added to your active portfolio." : "Removed from the active queue.");
+  }
+
+  async function testConnection(config = railway, quiet = false) {
+    if (!config.url.trim()) {
+      setConnection("offline");
+      if (!quiet) setToast("Add the Railway service URL first.");
+      return false;
+    }
+    setTesting(true);
+    try {
+      const response = await fetch(`${config.url.replace(/\/$/, "")}/health`);
+      const payload = (await response.json()) as {
+        ok?: boolean;
+        gemini_configured?: boolean;
+        search_configured?: boolean;
+        auth_configured?: boolean;
+        capabilities?: string[];
+      };
+      const healthy = Boolean(
+        response.ok &&
+          payload.ok &&
+          payload.gemini_configured &&
+          payload.search_configured &&
+          payload.auth_configured &&
+          payload.capabilities?.includes("discovery"),
+      );
+      setConnection(healthy ? "connected" : "offline");
+      if (!quiet) {
+        setToast(
+          healthy
+            ? payload.capabilities?.includes("adaptive-discovery")
+              ? "Adaptive discovery is online."
+              : "Backend is online, but still running the old discovery engine."
+            : "Backend answered, but one or more capabilities or secrets are missing.",
+        );
+      }
+      return healthy;
+    } catch {
+      setConnection("offline");
+      if (!quiet) setToast("Could not reach the Railway service.");
+      return false;
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  function requireBackend() {
+    if (railway.url.trim() && railway.secret.trim()) return true;
+    setSettingsOpen(true);
+    setToast("Connect the private Railway backend first.");
+    return false;
+  }
+
+  async function verifyPendingLeads(current: Contest[]) {
+    const pending = current
+      .filter((contest) => contest.analysisMethod === "unscored")
+      .slice(0, 8);
+    if (!pending.length) return current;
+    try {
+      const response = await fetch(`${railway.url.replace(/\/$/, "")}/v1/recon`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${railway.secret}`,
+        },
+        body: JSON.stringify({
+          contests: pending.map((contest) => ({
+            id: contest.id,
+            slug: contest.slug,
+            title: contest.title,
+            organizer: contest.organizer,
+            prize: contest.prize,
+            url: contest.url,
+            deadline: contest.deadline,
+            winners: contest.winners,
+            locality: contest.locality,
+            eligibility: contest.eligibility,
+            entry_method: contest.entryMethod,
+            known_registration_required: contest.registrationRequired,
+          })),
+          profile: PROFILE,
+        }),
+      });
+      const payload = (await response.json()) as { analyses?: ReconAnalysis[] };
+      if (!response.ok || !payload.analyses) return current;
+      const byId = new Map(payload.analyses.map((analysis) => [analysis.contest_id, analysis]));
+      return current.map((contest) => {
+        const analysis = byId.get(contest.id);
+        return analysis ? mapAnalysis(contest, analysis) : contest;
+      });
+    } catch {
+      return current;
+    }
+  }
+
+  async function runDiscovery() {
+    if (scanning || !requireBackend()) return;
+    setScanning(true);
+    setScanProgress(6);
+    announce({
+      kind: "working",
+      message: "Planning several search waves, then verifying each direct entry page.",
+    });
+    const timer = window.setInterval(
+      () => setScanProgress((value) => Math.min(88, value + 3)),
+      700,
+    );
+    try {
+      const response = await fetch(`${railway.url.replace(/\/$/, "")}/v1/discover`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${railway.secret}`,
+        },
+        body: JSON.stringify({
+          known_urls: contests.map((contest) => contest.url),
+          known_titles: contests.map((contest) => contest.title),
+          round: discoveryRound,
+          limit: 16,
+          profile: PROFILE,
+        }),
+      });
+      const payload = (await response.json()) as DiscoveryResponse;
+      if (!response.ok || !Array.isArray(payload.discoveries)) {
+        throw new Error(payload.detail ?? `Discovery failed with HTTP ${response.status}`);
+      }
+
+      const safe = payload.discoveries.filter(
+        (item) =>
+          item &&
+          typeof item.url === "string" &&
+          typeof item.title === "string" &&
+          typeof item.analysis?.deadline === "string",
+      );
+      const imported = safe.map((item, index) => mapDiscovery(item, -Date.now() - index));
+      const existing = new Set(contests.map((contest) => normalizeContestUrl(contest.url)));
+      const novel = imported.filter((contest) => !existing.has(normalizeContestUrl(contest.url)));
+      let updated = [...novel, ...contests];
+      updated = await verifyPendingLeads(updated);
+      setContests(updated);
+      setFilter("TODAY");
+      setSelectedId(null);
+      setDiscoveryRound((value) => value + 1);
+      setConnection("connected");
+      setScanProgress(100);
+
+      const message = novel.length
+        ? `${novel.length} new contests added after ${payload.searched_queries ?? 0} search lanes and ${payload.analyzed_candidates ?? 0} model checks.`
+        : `No new contest survived this run. ${payload.searched_queries ?? 0} lanes, ${payload.raw_candidates ?? 0} search results and ${payload.analyzed_candidates ?? 0} candidates were checked.`;
+      announce({ kind: "success", message });
+      setToast(message);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Discovery failed.";
+      setConnection("offline");

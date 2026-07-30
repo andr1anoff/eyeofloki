@@ -4,9 +4,13 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "predev": "node scripts/assemble-assets.mjs",
     "dev": "vite",
+    "prebuild": "node scripts/assemble-assets.mjs",
     "build": "tsc -b && vite build",
+    "prepreview": "node scripts/assemble-assets.mjs",
     "preview": "vite preview",
+    "prelint": "node scripts/assemble-assets.mjs",
     "lint": "eslint ."
   },
   "dependencies": {

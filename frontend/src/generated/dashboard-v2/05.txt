@@ -1,0 +1,142 @@
+          <button className={filter === "ENTERED" ? "is-active" : ""} onClick={() => switchFilter("ENTERED")}>
+            <Icon name="check" />
+            <span>Entered</span>
+            <i>{entered.length}</i>
+          </button>
+        </nav>
+
+        <button className="backend-card" onClick={() => setSettingsOpen(true)}>
+          <span className={`status-dot is-${connection}`} />
+          <span>
+            <b>{connection === "connected" ? "Backend online" : connection === "unknown" ? "Backend untested" : "Backend offline"}</b>
+            <small>Private Railway instance</small>
+          </span>
+          <Icon name="settings" size={16} />
+        </button>
+
+        <div className="operator">
+          <span>{displayName.slice(0, 1).toUpperCase()}</span>
+          <div><b>{displayName}</b><small>private instance</small></div>
+        </div>
+      </aside>
+
+      {mobileNav && <button className="nav-backdrop" aria-label="Close navigation" onClick={() => setMobileNav(false)} />}
+
+      <section className="loki-workspace">
+        <header className="loki-topbar">
+          <button className="icon-button menu-button" aria-label="Open navigation" onClick={() => setMobileNav(true)}>
+            <Icon name="menu" />
+          </button>
+          <div className="location-stamp"><span>Berlin / Germany</span><b>{berlinTimestamp()}</b></div>
+          <div className="topbar-actions">
+            <button className="backend-button" onClick={() => setSettingsOpen(true)}>
+              <span className={`status-dot is-${connection}`} />
+              <span>Backend</span>
+            </button>
+            <button className="discover-button" disabled={scanning} onClick={() => void runDiscovery()}>
+              <Icon name="radar" size={16} />
+              {scanning ? "Discovering…" : "Discover new"}
+            </button>
+          </div>
+          {scanning && <span className="scan-line" style={{ "--progress": `${scanProgress}%` } as CSSProperties} />}
+        </header>
+
+        <div className="loki-content">
+          {notice && (
+            <div className={`notice is-${notice.kind}`} role={notice.kind === "error" ? "alert" : "status"}>
+              <span className="status-dot" />
+              <b>{notice.kind === "working" ? "Discovery running" : notice.kind === "success" ? "Last discovery complete" : "Last discovery failed"}</b>
+              <p>{notice.message}</p>
+              <button aria-label="Dismiss status" onClick={() => setNotice(null)}><Icon name="close" size={15} /></button>
+            </div>
+          )}
+
+          <section className="hero-row">
+            <div>
+              <span className="kicker"><LokiMark /> Private contest intelligence</span>
+              <h1>Opportunity queue</h1>
+              <p>Active competitions ranked by utility, estimated odds and the amount of nonsense required to enter.</p>
+            </div>
+            <div className="method-card">
+              <b>Adaptive search</b>
+              <span>Each run plans several different search waves, checks direct pages, widens only when the queue is thin and excludes your history.</span>
+            </div>
+          </section>
+
+          <section className="stats-grid" aria-label="Portfolio overview">
+            <article><span>New</span><strong>{newCount}</strong><small>awaiting a decision</small></article>
+            <article><span>Ready</span><strong>{readyCount}</strong><small>strong entry paths</small></article>
+            <article><span>Entered</span><strong>{entered.length}</strong><small>active entries</small></article>
+            <article>
+              <span>Portfolio chance</span>
+              <strong>{formatChance(Math.round(likelyPortfolio * 1_000_000))}</strong>
+              <small>{formatChance(Math.round(lowPortfolio * 1_000_000))}–{formatChance(Math.round(highPortfolio * 1_000_000))}</small>
+            </article>
+          </section>
+
+          <section className="queue-shell">
+            <div className="queue-tools">
+              <div className="filters" role="tablist" aria-label="Contest filters">
+                {(["TODAY", "READY", "ENTERED", "BLOCKED", "ALL"] as Filter[]).map((item) => (
+                  <button key={item} role="tab" aria-selected={filter === item} className={filter === item ? "is-active" : ""} onClick={() => switchFilter(item)}>
+                    {item === "TODAY" ? "For today" : item.toLowerCase()}
+                    {item === "READY" && <span>{readyCount}</span>}
+                  </button>
+                ))}
+              </div>
+              <form className="search-form hunt" onSubmit={runHunt}>
+                <Icon name="radar" size={16} />
+                <input aria-label="What do you want to win" value={brief} onChange={(event) => setBrief(event.target.value)} placeholder="What do you want to win?" />
+                <button disabled={hunting || !brief.trim()}>{hunting ? "Hunting…" : "Hunt"}</button>
+              </form>
+              <form className="search-form" onSubmit={addLead}>
+                <Icon name="link" size={16} />
+                <input aria-label="Contest URL" value={leadUrl} onChange={(event) => setLeadUrl(event.target.value)} placeholder="Paste a contest URL" />
+                <button disabled={adding || !leadUrl.trim()}>{adding ? "Adding…" : "Add"}</button>
+              </form>
+            </div>
+
+            <div className="contest-stack">
+              {visible.length ? (
+                visible.map((contest) => (
+                  <ContestCard key={contest.id} contest={contest} onOpen={() => setSelectedId(contest.id)} onStatus={updateStatus} />
+                ))
+              ) : (
+                <div className="empty-state">
+                  <LokiMark />
+                  <h2>Nothing in this view</h2>
+                  <p>Change the filter, paste a lead or run a new discovery wave.</p>
+                  <button onClick={() => void runDiscovery()} disabled={scanning}>Discover contests</button>
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
+      </section>
+
+      {selected && (
+        <DetailDialog contest={selected} onClose={() => setSelectedId(null)} onStatus={updateStatus} />
+      )}
+
+      {settingsOpen && (
+        <ConnectionDialog
+          railway={railway}
+          setRailway={setRailway}
+          connection={connection}
+          testing={testing}
+          onClose={() => setSettingsOpen(false)}
+          onTest={() => void testConnection()}
+          onSave={saveConnection}
+          onExport={exportBackup}
+          onImport={importBackup}
+        />
+      )}
+
+      {toast && <div className="toast" role="status"><LokiMark /><span>{toast}</span></div>}
+    </main>
+  );
+}
+
+function ContestCard({ contest, onOpen, onStatus }: { contest: Contest; onOpen: () => void; onStatus: (id: number, status: ContestStatus) => void }) {
+  return (
+    <article className="contest-card">
