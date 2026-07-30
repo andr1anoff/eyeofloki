@@ -1,0 +1,7 @@
+        <div className="backup-row"><div><b>Move or back up this instance</b><span>The JSON includes contest history and your Railway secret.</span></div><div><button onClick={onExport}><Icon name="download" size={15} />Export</button><label><Icon name="upload" size={15} />Import<input type="file" accept="application/json,.json" onChange={(event) => { const file = event.target.files?.[0]; if (file) void onImport(file); event.target.value = ""; }} /></label></div></div>
+        <div className="connection-status"><span className={`status-dot is-${connection}`} />{connection === "connected" ? "Connected and ready" : connection === "unknown" ? "Not tested yet" : "Not connected"}</div>
+        <footer><button className="secondary" onClick={onTest} disabled={testing}>{testing ? "Testing…" : "Test connection"}</button><button className="primary" onClick={onSave} disabled={!railway.url.trim() || !railway.secret.trim()}>Save connection</button></footer>
+      </section>
+    </div>
+  );
+}
