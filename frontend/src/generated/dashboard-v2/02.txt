@@ -1,0 +1,201 @@
+  if (!Number.isFinite(ppm) || ppm <= 0) return "—";
+  const percent = ppm / 10_000;
+  if (percent < 0.01) return `${percent.toFixed(3)}%`;
+  if (percent < 1) return `${percent.toFixed(2)}%`;
+  return `${percent.toFixed(1)}%`;
+}
+
+function chanceRange(contest: Contest) {
+  if (!contest.chanceHighPpm) return "Awaiting estimate";
+  return `${formatChance(contest.chanceLowPpm)}–${formatChance(contest.chanceHighPpm)}`;
+}
+
+function crowdLabel(contest: Contest) {
+  const ppm = contest.chanceLikelyPpm;
+  if (!ppm) return "Unknown field";
+  if (ppm >= 50_000) return "Small field";
+  if (ppm >= 10_000) return "Moderate field";
+  if (ppm >= 1_000) return "Crowded";
+  return "Very crowded";
+}
+
+function portfolioChance(contests: Contest[], field: keyof Pick<Contest, "chanceLowPpm" | "chanceLikelyPpm" | "chanceHighPpm">) {
+  return 1 - contests.reduce((none, contest) => {
+    const chance = Math.min(1, Number(contest[field]) / 1_000_000);
+    return none * (1 - chance);
+  }, 1);
+}
+
+function normalizeContestUrl(value: string) {
+  try {
+    const url = new URL(value);
+    url.hash = "";
+    url.search = "";
+    url.hostname = url.hostname.replace(/^www\./, "").toLowerCase();
+    url.pathname = url.pathname.replace(/\/+$/, "") || "/";
+    return url.toString().replace(/\/$/, "");
+  } catch {
+    return value.trim().toLowerCase();
+  }
+}
+
+function mapAnalysis(contest: Contest, analysis: ReconAnalysis): Contest {
+  const mapped = {
+    ...contest,
+    score: analysis.score,
+    status: contest.status === "ENTERED" ? "ENTERED" : analysis.status,
+    verdict: analysis.verdict,
+    competition: analysis.competition,
+    confidence: analysis.confidence,
+    entrantsLow: analysis.entrants_low,
+    entrantsLikely: analysis.entrants_likely,
+    entrantsHigh: analysis.entrants_high,
+    chanceLowPpm: analysis.chance_low_ppm,
+    chanceLikelyPpm: analysis.chance_likely_ppm,
+    chanceHighPpm: analysis.chance_high_ppm,
+    frictionMinutes: analysis.friction_minutes,
+    friction: `≈ ${Math.max(1, Math.round(analysis.friction_minutes))} min`,
+    registrationRequired: analysis.registration_required,
+    newsletterRequired: analysis.newsletter_required,
+    deadline: normalizeIsoDate(analysis.deadline) ?? contest.deadline,
+    winners: analysis.winners,
+    description: analysis.summary,
+    reasons: JSON.stringify(analysis.reasons),
+    evidenceUrls: JSON.stringify(analysis.evidence_urls),
+    verification: analysis.verification,
+    scoreBreakdown: JSON.stringify(analysis.score_breakdown),
+    analysisMethod: analysis.analysis_method,
+    lastCheckedAt: analysis.analyzed_at,
+  };
+  return sanitizeContest(mapped, contest) ?? contest;
+}
+
+function mapDiscovery(item: DiscoveryItem, id: number): Contest {
+  const base: Contest = {
+    id,
+    slug: item.slug,
+    title: item.title,
+    organizer: item.organizer,
+    prize: item.prize,
+    description: item.analysis.summary,
+    score: 0,
+    status: "NEW",
+    competition: "High",
+    deadline: item.analysis.deadline,
+    eligibility: item.eligibility,
+    entryMethod: item.entry_method,
+    friction: "Unknown",
+    winners: Math.max(1, item.analysis.winners),
+    locality: item.locality,
+    url: item.url,
+    musicUrl: null,
+    verdict: "Needs review",
+    reasons: "[]",
+    verification: item.analysis.verification,
+    registrationRequired: false,
+    newsletterRequired: false,
+    entrantsLow: 0,
+    entrantsLikely: 0,
+    entrantsHigh: 0,
+    chanceLowPpm: 0,
+    chanceLikelyPpm: 0,
+    chanceHighPpm: 0,
+    confidence: "Low",
+    frictionMinutes: 0,
+    scoreBreakdown: "{}",
+    evidenceUrls: "[]",
+    analysisMethod: "adaptive-discovery-v6",
+    enteredAt: null,
+    lastCheckedAt: item.analysis.analyzed_at,
+  };
+  return mapAnalysis(base, item.analysis);
+}
+
+function berlinTimestamp() {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Berlin",
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  })
+    .format(new Date())
+    .replace(",", " ·")
+    .toUpperCase();
+}
+
+export function DashboardV2({ displayName }: { displayName: string }) {
+  const [contests, setContests] = useState<Contest[]>(initialContests);
+  const [railway, setRailway] = useState<RailwayConfig>(initialRailway);
+  const [filter, setFilter] = useState<Filter>("TODAY");
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [mobileNav, setMobileNav] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [connection, setConnection] = useState<ConnectionState>(
+    railway.url && railway.secret ? "unknown" : "offline",
+  );
+  const [notice, setNotice] = useState<Notice | null>(initialNotice);
+  const [toast, setToast] = useState<string | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const [scanProgress, setScanProgress] = useState(0);
+  const [hunting, setHunting] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [brief, setBrief] = useState("");
+  const [leadUrl, setLeadUrl] = useState("");
+  const [discoveryRound, setDiscoveryRound] = useState(() => {
+    const value = Number(window.localStorage.getItem(STORAGE.round));
+    return Number.isInteger(value) && value >= 0 ? value : 0;
+  });
+
+  useEffect(() => {
+    window.localStorage.setItem(STORAGE.contests, JSON.stringify(contests));
+  }, [contests]);
+
+  useEffect(() => {
+    window.localStorage.setItem(STORAGE.railway, JSON.stringify(railway));
+  }, [railway]);
+
+  useEffect(() => {
+    window.localStorage.setItem(STORAGE.round, String(discoveryRound));
+  }, [discoveryRound]);
+
+  useEffect(() => {
+    if (notice) window.localStorage.setItem(STORAGE.notice, JSON.stringify(notice));
+    else window.localStorage.removeItem(STORAGE.notice);
+  }, [notice]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = window.setTimeout(() => setToast(null), 5200);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
+
+  useEffect(() => {
+    const modalOpen = selectedId !== null || settingsOpen || mobileNav;
+    document.body.style.overflow = modalOpen ? "hidden" : "";
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      if (settingsOpen) setSettingsOpen(false);
+      else if (selectedId !== null) setSelectedId(null);
+      else setMobileNav(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [mobileNav, selectedId, settingsOpen]);
+
+  const visible = useMemo(() => {
+    const selected =
+      filter === "ALL"
+        ? contests
+        : filter === "TODAY"
+          ? contests.filter((contest) => ["NEW", "READY"].includes(contest.status))
+          : contests.filter((contest) => contest.status === filter);
+    return [...selected].sort((a, b) => b.score - a.score);
+  }, [contests, filter]);
+
