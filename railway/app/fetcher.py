@@ -78,12 +78,12 @@ def _evidence_excerpt(text: str, limit: int = 3_600) -> str:
         return compact
 
     lowered = compact.casefold()
-    spans: list[tuple[int, int]] = [(0, min(650, len(compact)))]
+    spans: list[tuple[int, int]] = [(0, min(250, len(compact)))]
     for term in EVIDENCE_TERMS:
         start = lowered.find(term.casefold())
         if start < 0:
             continue
-        spans.append((max(0, start - 220), min(len(compact), start + 620)))
+        spans.append((max(0, start - 120), min(len(compact), start + 620)))
 
     spans.sort()
     merged: list[list[int]] = []
