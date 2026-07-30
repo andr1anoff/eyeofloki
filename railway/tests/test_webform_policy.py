@@ -13,7 +13,10 @@ def test_form_search_waves_are_broad_unique_and_non_social() -> None:
     assert [len(wave) for wave in waves] == [8, 8, 8]
     assert len(queries) == len(set(query.casefold() for query in queries))
     assert all(
-        any(token in query.casefold() for token in ("form", "formular", "teilnehmen"))
+        any(
+            token in query.casefold()
+            for token in ("form", "formular", "teilnahme", "teilnehmen")
+        )
         for query in queries
     )
     assert not any(
