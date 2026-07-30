@@ -16,7 +16,7 @@ jobs:
           cache: pip
           cache-dependency-path: railway/requirements.txt
       - run: pip install -r railway/requirements.txt
-      - run: pytest railway/tests
+      - run: PYTHONPATH=. pytest railway/tests
 
   frontend:
     runs-on: ubuntu-latest
